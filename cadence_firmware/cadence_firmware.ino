@@ -42,8 +42,8 @@ For support:
 
 // Amount in milliseconds to hold solenoid on for
 #define SOLENOID_ENABLE_TIME  100
-#define MOTOR_ENABLE_TIME 80
-#define MOTOR_PWM_VALUE 200
+#define MOTOR_ENABLE_TIME 100
+#define MOTOR_PWM_VALUE 255
 
 #define SERIAL_ACTUATOR_PIN_INDEX 1 // 0 or 1 - this is the index in the actuator pins that will be toggled by the serial port
 #define STATUS_LED_BLINK_OFF_TIME 100 // in ms. The amount of time for the status LED to be off when displaying a blink pattern to the user
@@ -68,7 +68,7 @@ For support:
 */
 
 #define NUM_PAIRS 2
-#define NUM_HISTORIC_BEAT_TIMES 5
+#define NUM_HISTORIC_BEAT_TIMES 10
 
 #define MIN_DIFF_STD_DEV 5
 #define MAX_DIFF_STD_DEV 80
@@ -96,7 +96,7 @@ unsigned long actuator_start[NUM_PAIRS] = {0, 0};
 // Pins of all inputs and outputs
 #define  PULSE1_PIN A0
 #define  PULSE2_PIN A1
-#define  ACTUATOR1_PIN 2
+#define  ACTUATOR1_PIN 2 // also soldered to 9
 #define  ACTUATOR2_PIN 3
 #define  STATUS_LED_PIN 5
 
