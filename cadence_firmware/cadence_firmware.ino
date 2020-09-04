@@ -28,6 +28,14 @@ For support:
 
 */
 
+#include "wrapCounter.h"
+
+/*
+  Debug and test mode config
+*/
+
+#define DEBUG_MODE true
+
 /*
   High level configuration constants
 */
@@ -54,9 +62,14 @@ For support:
 */
 
 #define NUM_PAIRS 2
+#define NUM_HISTORIC_BEAT_TIMES 5
 
 volatile unsigned long last_beat_time[NUM_PAIRS] = {0, 0};  // used to find the time between beats
 volatile unsigned long sample_counter[NUM_PAIRS] = {0, 0}; // used to determine pulse timing
+
+volatile unsigned long beat_time_history[NUM_PAIRS][NUM_HISTORIC_BEAT_TIMES] = { 0 };
+
+wrapCounter beat_history_index[NUM_PAIRS];
 
 // these are volatile because they are used inside of the ISR
 volatile boolean pulse_resetting[NUM_PAIRS] = {false, false};     // true when pulse wave is high, false when it's low
@@ -89,6 +102,10 @@ void setup() {
   pinMode(SOLENOID2_PIN, OUTPUT);
   pinMode(STATUS_LED_PIN, OUTPUT);
 
+  for (int i = 0; i < NUM_PAIRS; i++) {
+    beat_history_index[i] = wrapCounter(NUM_HISTORIC_BEAT_TIMES);
+  }
+
   Serial.begin(115200);
 
 }
@@ -101,6 +118,33 @@ void status_led_blink(int num_blinks, int on_time) {
     digitalWrite(STATUS_LED_PIN, LOW);
     delay(STATUS_LED_BLINK_OFF_TIME);
   }
+}
+
+/*
+ * Get the mean from an array of ints
+ */
+float get_mean(long unsigned int * val, int array_count) {
+  long total = 0;
+  for (int i = 0; i < array_count; i++) {
+    total = total + val[i];
+  }
+  float avg = total/(float)array_count;
+  return avg;
+}
+
+/*
+ * Get the standard deviation from an array of ints
+ */
+float standard_deviation(long unsigned int * val, int array_count) {
+  float avg = get_mean(val, array_count);
+  long total = 0;
+  for (int i = 0; i < array_count; i++) {
+    total = total + (val[i] - avg) * (val[i] - avg);
+  }
+
+  float variance = total/(float)array_count;
+  float std_dev = sqrt(variance);
+  return std_dev;
 }
 
 void loop() {
@@ -163,6 +207,25 @@ void loop() {
     }
   
   }
+
+  #if DEBUG_MODE == true
+
+  for (int pair_index = 0; pair_index < NUM_PAIRS; pair_index++) {
+    Serial.print("Sensor ");
+    Serial.print(pair_index);
+    Serial.print(" values: ");
+    for (int history_index = 0; history_index < NUM_HISTORIC_BEAT_TIMES; history_index++) {
+      Serial.print(beat_time_history[pair_index][history_index]);
+      Serial.print(", ");
+    }
+    float std = standard_deviation(beat_time_history[pair_index], NUM_HISTORIC_BEAT_TIMES);
+    Serial.print("STD: ");
+    Serial.print(std);
+    Serial.print(" "); 
+  }
+  Serial.println();
+
+  #endif
   
   delay(10);
 
@@ -173,12 +236,15 @@ ISR(TIMER1_OVF_vect) {
   // triggered every time Timer 1 overflows, every 1mS
   for (int pair_index = 0; pair_index < NUM_PAIRS; pair_index++) {
 
-    int pulse_signal = analogRead(pulse_pins[pair_index]);  // read the pulse Sensor 
+    int pulse_signal = analogRead(pulse_pins[pair_index]);   // read the pulse Sensor 
     sample_counter[pair_index]++;                            // keep track of the time with this variable (ISR triggered every 1mS
 
-    int time_delta = sample_counter[pair_index]-last_beat_time[pair_index];  // monitor the time since the last beat to avoid noise
+    int time_delta = sample_counter[pair_index] - last_beat_time[pair_index];  // monitor the time since the last beat to avoid noise
     
-    if ( (pulse_signal > 520) && (pulse_resetting[pair_index] == false) && (time_delta > 500) ) {  
+    if ( (pulse_signal > 520) && (pulse_resetting[pair_index] == false) && (time_delta > 500) ) {
+      beat_time_history[pair_index][beat_history_index[pair_index].value] = time_delta;
+      beat_history_index[pair_index].increment();
+      
       last_beat_time[pair_index] = sample_counter[pair_index];   // keep track of time for next pulse
       pulse_non_resetting[pair_index] = true;                 // set Quantified Self flag when beat is found and BPM gets updated, QS FLAG IS NOT CLEARED INSIDE THIS ISR
       pulse_resetting[pair_index] = true;                     // set the pulse flag when we think there is a pulse

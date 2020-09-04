@@ -87,25 +87,14 @@ void setup() {
 
 void loop() {
 
-  const int num_pulses = 5;
+  const int pwm_value = 200;
+  const int motor_on_time = 80;
+  const int time_between_drips = 1000;
 
-  const int pulse_times[NUM_PAIRS] = {100, 100};
-  const int time_between_pulses = 566;
+  analogWrite(SOLENOID2_PIN, pwm_value);
+  //digitalWrite(SOLENOID2_PIN, HIGH);
+  delay(motor_on_time);
+  digitalWrite(SOLENOID2_PIN, LOW);
+  delay(time_between_drips);
 
-  
-  for (int pin = 0; pin < 2; pin++) {
-    for (int pulse = 0; pulse < num_pulses; pulse++) {
-      int p = solenoid_pins[pin];
-      Serial.print(p);
-      Serial.print(" ");
-      Serial.println("high");
-      digitalWrite(p, HIGH);
-      delay(pulse_times[pin]);
-      digitalWrite(p, LOW);
-      Serial.print(p);
-      Serial.print(" ");
-      Serial.println("low");
-      delay(time_between_pulses);
-    }
-  }
 }
