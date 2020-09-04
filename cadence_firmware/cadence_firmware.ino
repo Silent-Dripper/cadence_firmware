@@ -62,9 +62,13 @@ For support:
 */
 
 #define NUM_PAIRS 2
-#define NUM_HISTORIC_BEAT_TIMES 5
+#define NUM_HISTORIC_BEAT_TIMES 3
+
+#define MAX_DIFF_STD_DEV 200
+#define MAX_PULSE_DISTANCE 2000 // in ms
 
 volatile unsigned long last_beat_time[NUM_PAIRS] = {0, 0};  // used to find the time between beats
+volatile unsigned long last_beat_time_wall[NUM_PAIRS] = {0, 0};  // used to find the time between beats
 volatile unsigned long sample_counter[NUM_PAIRS] = {0, 0}; // used to determine pulse timing
 
 volatile unsigned long beat_time_history[NUM_PAIRS][NUM_HISTORIC_BEAT_TIMES] = { 0 };
@@ -173,46 +177,58 @@ void loop() {
     Serial.write(command);  // echo back
   }
 
+  bool pulse_sensor_enabled[NUM_PAIRS] = { false , false };
+
   for (int pair_index = 0; pair_index < NUM_PAIRS; pair_index++) {
+
+    float std = standard_deviation(beat_time_history[pair_index], NUM_HISTORIC_BEAT_TIMES);
+    bool e = (std < MAX_DIFF_STD_DEV) && (millis() - last_beat_time_wall[pair_index] < MAX_PULSE_DISTANCE);
+    pulse_sensor_enabled[pair_index] = e;
     
-    bool start_solenoid = false;
+    if (pulse_sensor_enabled[pair_index]) {
+      bool start_solenoid = false;
 
-    if ((serial_solenoid_enabled) && (pair_index == SERIAL_SOLENOID_PIN_INDEX)) {
-      start_solenoid = true;
-    }
-
-    if (pair_index != SERIAL_SOLENOID_PIN_INDEX) {
-      if (pulse_non_resetting[pair_index] == true) {
-        pulse_non_resetting[pair_index] = false;
-        start_solenoid = true; 
+      if ((serial_solenoid_enabled) && (pair_index == SERIAL_SOLENOID_PIN_INDEX)) {
+        start_solenoid = true;
       }
-    }
 
-    if (start_solenoid) {
-      if (solenoid_enabled[pair_index] == false) {
-        solenoid_enabled[pair_index] = true;
-        solenoid_start[pair_index] = millis();
+      if (pair_index != SERIAL_SOLENOID_PIN_INDEX) {
+        if (pulse_non_resetting[pair_index] == true) {
+          pulse_non_resetting[pair_index] = false;
+          start_solenoid = true; 
+        }
       }
-    }
-
-    if (solenoid_enabled[pair_index]) {
-      digitalWrite(solenoid_pins[pair_index], HIGH);
-      if (millis() - solenoid_start[pair_index] > SOLENOID_ENABLE_TIME) {
-        digitalWrite(solenoid_pins[pair_index], LOW);
-        solenoid_enabled[pair_index] = false;
-        if (pair_index == SERIAL_SOLENOID_PIN_INDEX) {
-          digitalWrite(STATUS_LED_PIN, LOW);
+  
+      if (start_solenoid) {
+        if (solenoid_enabled[pair_index] == false) {
+          solenoid_enabled[pair_index] = true;
+          solenoid_start[pair_index] = millis();
+        }
+      }
+  
+      if (solenoid_enabled[pair_index]) {
+        digitalWrite(solenoid_pins[pair_index], HIGH);
+        if (millis() - solenoid_start[pair_index] > SOLENOID_ENABLE_TIME) {
+          digitalWrite(solenoid_pins[pair_index], LOW);
+          solenoid_enabled[pair_index] = false;
+          if (pair_index == SERIAL_SOLENOID_PIN_INDEX) {
+            digitalWrite(STATUS_LED_PIN, LOW);
+          }
         }
       }
     }
-  
+    
   }
 
   #if DEBUG_MODE == true
 
   for (int pair_index = 0; pair_index < NUM_PAIRS; pair_index++) {
-    Serial.print("Sensor ");
+    Serial.print("Sensor: ");
     Serial.print(pair_index);
+    Serial.print(" enabled: ");
+    Serial.print(pulse_sensor_enabled[pair_index]);
+    Serial.print(" pulse: ");
+    Serial.print(solenoid_enabled[pair_index]);
     Serial.print(" values: ");
     for (int history_index = 0; history_index < NUM_HISTORIC_BEAT_TIMES; history_index++) {
       Serial.print(beat_time_history[pair_index][history_index]);
@@ -241,11 +257,13 @@ ISR(TIMER1_OVF_vect) {
 
     int time_delta = sample_counter[pair_index] - last_beat_time[pair_index];  // monitor the time since the last beat to avoid noise
     
-    if ( (pulse_signal > 520) && (pulse_resetting[pair_index] == false) && (time_delta > 500) ) {
+    if ((pulse_signal > 520) && (pulse_resetting[pair_index] == false) && (time_delta > 500)) {
       beat_time_history[pair_index][beat_history_index[pair_index].value] = time_delta;
       beat_history_index[pair_index].increment();
-      
+            
       last_beat_time[pair_index] = sample_counter[pair_index];   // keep track of time for next pulse
+      last_beat_time_wall[pair_index] = millis();
+      
       pulse_non_resetting[pair_index] = true;                 // set Quantified Self flag when beat is found and BPM gets updated, QS FLAG IS NOT CLEARED INSIDE THIS ISR
       pulse_resetting[pair_index] = true;                     // set the pulse flag when we think there is a pulse
     }                       
