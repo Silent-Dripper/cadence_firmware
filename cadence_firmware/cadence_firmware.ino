@@ -91,7 +91,7 @@ volatile boolean pulse_resetting[NUM_PAIRS] = {false, false};     // true when p
 volatile boolean pulse_non_resetting[NUM_PAIRS] = {false, false}; // becomes true when pulse rate is determined. every 20 pulses
 
 bool actuator_enabled[NUM_PAIRS] = {false, false};
-unsigned long actuator_start[NUM_PAIRS] = {0, 0};
+volatile unsigned long actuator_start[NUM_PAIRS] = {0, 0};
 
 // Pins of all inputs and outputs
 #define  PULSE1_PIN A0
