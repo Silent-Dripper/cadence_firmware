@@ -83,15 +83,17 @@ For support:
 
 #define NUM_PAIRS 2
 
-#define NUM_HISTORIC_BEAT_TIMES 300
+#define NUM_HISTORIC_SAMPLES 300
 
 volatile unsigned long last_beat_time[NUM_PAIRS] = {0, 0};  // used to find the time between beats
 volatile unsigned long last_beat_time_wall[NUM_PAIRS] = {0, 0};  // used to find the time between beats
 volatile unsigned long last_sample_time[NUM_PAIRS] = {0, 0}; // used to determine pulse timing
 
-// these are used to keep track of when each beat gets detected
-volatile int beat_time_history[NUM_PAIRS][NUM_HISTORIC_BEAT_TIMES] = { 0 };
-wrapCounter beat_history_index[NUM_PAIRS];
+// these are used to detect when a finger is not there
+#define SAMPLE_HISTORY_HIGH_VALUE_MIN 950
+#define NUM_HIGH_VALUES_IN_SAMPLE_HISTORY 50
+volatile int sample_history[NUM_PAIRS][NUM_HISTORIC_SAMPLES] = { 0 };
+wrapCounter sample_history_index[NUM_PAIRS];
 
 // these are volatile because they are used inside of the ISR
 volatile boolean pulse_resetting[NUM_PAIRS] = {false, false};     // true when inside a pulse, false otherwise
@@ -169,16 +171,14 @@ bool is_pulse_sensor_enabled(int sensor_index) {
 
   int num_high_values = 0;
   
-  for (int i = 0; i < NUM_HISTORIC_BEAT_TIMES; i++) {
-    int value = beat_time_history[sensor_index][i];
-
-    if (value > 950) {
+  for (int i = 0; i < NUM_HISTORIC_SAMPLES; i++) {
+    int value = sample_history[sensor_index][i];
+    if (value > SAMPLE_HISTORY_HIGH_VALUE_MIN) {
       num_high_values++;
     }
-
   }
 
-  if (num_high_values > 50) {
+  if (num_high_values > NUM_HIGH_VALUES_IN_SAMPLE_HISTORY) {
     return true;
   } else {
     return false;
@@ -201,7 +201,7 @@ void setup() {
   pinMode(STATUS_LED_PIN, OUTPUT);
 
   for (int i = 0; i < NUM_PAIRS; i++) {
-    beat_history_index[i] = wrapCounter(NUM_HISTORIC_BEAT_TIMES);
+    sample_history_index[i] = wrapCounter(NUM_HISTORIC_SAMPLES);
   }
 
   Serial.begin(115200);
@@ -271,22 +271,20 @@ void loop() {
         }
       }
     }
-      
-
-    
+ 
   }
 
   #if DEBUG_MODE == true
 
     for (int pair_index = 0; pair_index < NUM_PAIRS; pair_index++) {
-      //Serial.print("Sensor: ");
-      //Serial.print(pair_index);
-      //Serial.print(" enabled: ");
-      //Serial.print(pulse_sensor_enabled[pair_index]);
-      //Serial.print(" pulse: ");
-      //Serial.print(actuator_enabled[pair_index]);
+      Serial.print("Sensor: ");
+      Serial.print(pair_index);
+      Serial.print(" enabled: ");
+      Serial.print(pulse_sensor_enabled[pair_index]);
+      Serial.print(" pulse: ");
+      Serial.print(actuator_enabled[pair_index]);
     }
-    //Serial.println();
+    Serial.println();
 
   #endif
   
@@ -316,17 +314,8 @@ ISR(TIMER1_OVF_vect) {
       pulse_resetting[pair_index] = false;                            // reset the pulse flag so we can do it again!
     }
 
-    beat_time_history[pair_index][beat_history_index[pair_index].value] = pulse_signal;
-    beat_history_index[pair_index].increment();
-
-    //Serial.println(pulse_signal);
- 
-    /*
-    if (sample_decimator.increment()) {
-      beat_time_history[pair_index][beat_history_index[pair_index].value] = pulse_signal;
-      beat_history_index[pair_index].increment();
-    }
-    */
+    sample_history[pair_index][sample_history_index[pair_index].value] = pulse_signal;
+    sample_history_index[pair_index].increment();
     
   } 
 }
