@@ -1,11 +1,11 @@
 /*
 
-Cadence Driver - Version 3 - 1/8/2019 TODO: update!
+Cadence Driver - Version 4.0.0 - 9/7/2020
 
-This version of Cadence Driver uses none of the given pulsesensor code because the performance was not acceptable.
+Trigger actuators (solenoids or pumps) based on human heartbeats via a pulse sensor or messages from a host PC.
 
 Pins:
-    ACTUATOR 1 - D2
+    ACTUATOR 1 - D2/D11
     ACTUATOR 2 - D3
     Status LED - D5
     Heartbeat Sensor 1 - A0
@@ -22,6 +22,8 @@ Usage Notes:
 
     * When the host PC connects to twitch, the red LED on the PCB will blink 3 times quickly.
     * If the host PC becomes disconnected from twitch, the red LED on the PCB will blink twice slowly.
+    * Set ACTUATOR_*_SERIAL_CONTROL to True if you want the corresponding actuator to be controlled via the serial port. False if you want it to be controlled by it's pulse sensor
+    * Set ACTUATOR_*_MOTOR to True if it is a pump and false if it is a solenoid.
       
 For support:
     dev@esologic.com
@@ -32,9 +34,8 @@ For support:
 #include "wrapCounter.h"
 
 
-#define MIN_MEAN_ANALYSIS_VALUE 6000
-#define ACTUATOR_2_SERIAL_CONTROL true
-#define MIN_FILTER_MS 1000
+#define MIN_MEAN_ANALYSIS_VALUE 6000 // magic foo for seeing if someone is attached to sensor or not. See usage.
+#define MIN_FILTER_MS 1000  // control how often the algo for detecting if a human is attached to sensor or not runs
 
 /*
   Debug and test mode config
@@ -67,6 +68,7 @@ For support:
 #define STATUS_LED_BLINK_OFF_TIME 100 // in ms. The amount of time for the status LED to be off when displaying a blink pattern to the user
 
 #define ACTUATOR_1_SERIAL_CONTROL false
+#define ACTUATOR_2_SERIAL_CONTROL true
 
 #define ACTUATOR_1_MOTOR true
 #define ACTUATOR_2_MOTOR true
