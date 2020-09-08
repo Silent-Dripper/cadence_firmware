@@ -68,7 +68,7 @@ unsigned long solenoid_start[NUM_PAIRS] = {0, 0};
 // Pins of all inputs and outputs
 #define  PULSE1_PIN A0
 #define  PULSE2_PIN A1
-#define  SOLENOID1_PIN 2
+#define  SOLENOID1_PIN 11
 #define  SOLENOID2_PIN 3
 #define  STATUS_LED_PIN 5
 
@@ -87,14 +87,14 @@ void setup() {
 
 void loop() {
 
-  const int pwm_value = 200;
-  const int motor_on_time = 80;
-  const int time_between_drips = 1000;
+  const int pwm_value = 180;
+  const int motor_on_time = 130;
+  const int time_between_drips = 300;
 
-  analogWrite(SOLENOID2_PIN, pwm_value);
+  analogWrite(SOLENOID1_PIN, pwm_value);
   //digitalWrite(SOLENOID2_PIN, HIGH);
   delay(motor_on_time);
-  digitalWrite(SOLENOID2_PIN, LOW);
+  digitalWrite(SOLENOID1_PIN, LOW);
   delay(time_between_drips);
 
 }
