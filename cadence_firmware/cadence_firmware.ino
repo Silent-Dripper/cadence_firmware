@@ -1,6 +1,6 @@
 /*
 
-Cadence Driver - Version 4.0.0 - 9/7/2020
+Cadence Driver - Version 4.1.0 - 9/20/2020
 
 Trigger actuators (solenoids or pumps) based on human heartbeats via a pulse sensor or messages from a host PC.
 
