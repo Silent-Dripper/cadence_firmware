@@ -1,6 +1,6 @@
 /*
 
-Cadence Driver - Version 4.0.0 - 9/7/2020
+Cadence Driver - Version 4.1.0 - 9/20/2020
 
 Trigger actuators (solenoids or pumps) based on human heartbeats via a pulse sensor or messages from a host PC.
 
@@ -97,15 +97,16 @@ volatile unsigned long last_sample_time[NUM_PAIRS] = {0, 0}; // used to determin
 
 // these are used to detect when a finger is not there
 
-#define NUM_HISTORIC_BEAT_TIMESTAMPS 10
-volatile unsigned long beat_timestamp_history[NUM_PAIRS][NUM_HISTORIC_BEAT_TIMESTAMPS] = { 0 };
-wrapCounter beat_timestamp_history_index[NUM_PAIRS];
+#define VALUE_INTO_ANALYSIS_EVERY_N_SAMPLES 15
+#define NUM_HISTORIC_ANALYSIS 400
+#define ANALYSIS_MIN_POSITIVE_THRESHOLD 150
+#define ANALYSIS_MAX_NEGATIVE_THRESHOLD 50
+#define MIN_DISTANCE_FROM_NEGATIVE_ANALYSIS 5500  // in ms
 
-volatile unsigned long previous_filter_time[NUM_PAIRS] = { 0 };
-
-#define NUM_HISTORIC_ANALYSIS 5
-volatile unsigned long analysis_history[NUM_PAIRS][NUM_HISTORIC_ANALYSIS] = { 0 };
+volatile int analysis_history[NUM_PAIRS][NUM_HISTORIC_ANALYSIS] = { 0 };
 wrapCounter analysis_history_index[NUM_PAIRS];
+wrapCounter sample_entry_counter[NUM_PAIRS];
+volatile unsigned long previous_negative_analysis_time[NUM_PAIRS] = { 0 };
 
 // these are volatile because they are used inside of the ISR
 volatile boolean pulse_resetting[NUM_PAIRS] = {false, false};     // true when inside a pulse, false otherwise
@@ -133,7 +134,7 @@ void status_led_blink(int num_blinks, int on_time) {
 /*
  * Get the mean from an array of volatile long unsigned int
  */
-float mean(volatile unsigned long * val, int array_length) {
+float mean(volatile int * val, int array_length) {
   long unsigned int total = 0;
   for (int i = 0; i < array_length; i++) {
     total = total + val[i];
@@ -142,18 +143,22 @@ float mean(volatile unsigned long * val, int array_length) {
   return avg;
 }
 
-/*
- * Get the standard deviation from an array of volatile long unsigned int
- */
-float standard_deviation(volatile unsigned long * val, int array_length) {
+float variance(volatile int * val, int array_length) {
   float avg = mean(val, array_length);
   long unsigned int total = 0;
   for (int i = 0; i < array_length; i++) {
     total = total + (val[i] - avg) * (val[i] - avg);
   }
 
-  float variance = total/(float)array_length;
-  float std_dev = sqrt(variance);
+  return total/(float)array_length;  
+}
+
+/*
+ * Get the standard deviation from an array of volatile long unsigned int
+ */
+float standard_deviation(volatile int * val, int array_length) {
+  float v = variance(val, array_length);
+  float std_dev = sqrt(v);
   return std_dev;
 }
 
@@ -181,50 +186,36 @@ void change_actuator_state(int actuator_index, bool enabled) {
 }
 
 void update_is_person_attached_to_pulse_sensor(int sensor_index) {
+  
+  float std = standard_deviation(analysis_history[sensor_index], NUM_HISTORIC_ANALYSIS);
+
+  bool positive_analysis = (std >= ANALYSIS_MIN_POSITIVE_THRESHOLD);
+  bool negative_analysis = (std <= ANALYSIS_MAX_NEGATIVE_THRESHOLD);
 
   unsigned long current_time = millis();
 
-  if (current_time - previous_filter_time[sensor_index] >= MIN_FILTER_MS) {
-    previous_filter_time[sensor_index] = current_time;
-
-    volatile unsigned long min_timestamp = beat_timestamp_history[sensor_index][0];
-    volatile unsigned long max_timestamp = beat_timestamp_history[sensor_index][0];
-  
-    volatile unsigned long value;
-    
-    for (int i = 0; i < NUM_HISTORIC_BEAT_TIMESTAMPS; i++) {
-    
-      value = beat_timestamp_history[sensor_index][i];
-    
-      if (value < min_timestamp) {
-        min_timestamp = value;
-      }
-      if (value > max_timestamp) {
-        max_timestamp = value;
-      }
-    }
-
-    volatile unsigned long diff = max_timestamp - min_timestamp;
-
-    volatile unsigned long diff_mean = mean(analysis_history[sensor_index], NUM_HISTORIC_ANALYSIS);
-    volatile unsigned long diff_std = standard_deviation(analysis_history[sensor_index], NUM_HISTORIC_ANALYSIS);
-      
-    analysis_history[sensor_index][analysis_history_index[sensor_index].value] = diff;
-    analysis_history_index[sensor_index].increment();   
-
-    #if DEBUG_MODE == true
-      Serial.print("diff: ");
-      Serial.print(diff);
-      Serial.print(" means: ");
-      Serial.print(diff_mean);
-      Serial.print(" std: ");
-      Serial.print(diff_std);
-      Serial.println();
-    #endif
-
-    pulse_sensor_enabled[sensor_index] = (diff_mean > MIN_MEAN_ANALYSIS_VALUE);
-    
+  if (negative_analysis) {
+    previous_negative_analysis_time[sensor_index] = current_time;
   }
+
+  if (positive_analysis) {
+    if ( (current_time - previous_negative_analysis_time[sensor_index]) >= MIN_DISTANCE_FROM_NEGATIVE_ANALYSIS) {
+        pulse_sensor_enabled[sensor_index] = true;
+    } else {
+      pulse_sensor_enabled[sensor_index] = false;
+    }
+  } else {
+    pulse_sensor_enabled[sensor_index] = false;
+  }
+  
+  #if DEBUG_MODE == true
+    Serial.print(std);
+    Serial.print(",");
+    Serial.print(ANALYSIS_MIN_POSITIVE_THRESHOLD);
+    Serial.print(",");
+    Serial.print(pulse_sensor_enabled[sensor_index]);
+    Serial.println();
+  #endif
 
 }
 
@@ -242,9 +233,14 @@ void setup() {
   pinMode(ACTUATOR2_PIN, OUTPUT);
   pinMode(STATUS_LED_PIN, OUTPUT);
 
-  for (int i = 0; i < NUM_PAIRS; i++) {
-    beat_timestamp_history_index[i] = wrapCounter(NUM_HISTORIC_BEAT_TIMESTAMPS);
-    analysis_history_index[i] = wrapCounter(NUM_HISTORIC_ANALYSIS);
+  for (int pair_index = 0; pair_index < NUM_PAIRS; pair_index++) {
+    analysis_history_index[pair_index] = wrapCounter(NUM_HISTORIC_ANALYSIS);
+    sample_entry_counter[pair_index] = wrapCounter(VALUE_INTO_ANALYSIS_EVERY_N_SAMPLES);
+
+    // fill this buffer with sensical values
+    for (int sample_index = 0; sample_index < NUM_HISTORIC_ANALYSIS; sample_index++) {
+      analysis_history[pair_index][sample_index] = analogRead(pulse_sensor_pins[pair_index]);
+    }
   }
 
   Serial.begin(115200);
@@ -255,6 +251,7 @@ void loop() {
 
   bool serial_actuator_enabled = false;
 
+  // Process commands from a host PC
   if (Serial.available()) {
     byte command = Serial.read();
     switch (command) {
@@ -281,6 +278,7 @@ void loop() {
 
     bool start_actuator = false;
 
+    // Either accept a command from the PC or read from the pulse sensor
     if (actuator_controlled_via_serial_port[pair_index] == true) {
       if (serial_actuator_enabled) {
         start_actuator = true;
@@ -306,13 +304,11 @@ void loop() {
       if (millis() - actuation_start_time[pair_index] > lookup_actuator_enable_time(pair_index)) {
         change_actuator_state(pair_index, LOW);
         actuator_enabled[pair_index] = false;
-
         if (actuator_controlled_via_serial_port[pair_index] == true) {
           digitalWrite(STATUS_LED_PIN, LOW);
         }
       }
     }
- 
   }
 
 }
@@ -328,9 +324,6 @@ ISR(TIMER1_OVF_vect) {
     int time_delta = last_sample_time[pair_index] - last_beat_time[pair_index];  // monitor the time since the last beat to avoid noise
     
     if ((pulse_signal > 520) && (pulse_resetting[pair_index] == false) && (time_delta > 400)) {            
-
-      beat_timestamp_history[pair_index][beat_timestamp_history_index[pair_index].value] = millis();
-      beat_timestamp_history_index[pair_index].increment();
       
       last_beat_time[pair_index] = last_sample_time[pair_index];   // keep track of time for next pulse
       
@@ -340,6 +333,12 @@ ISR(TIMER1_OVF_vect) {
 
     if (pulse_signal < 500 && pulse_resetting[pair_index] == true) {  // when the values are going down, it's the time between beats
       pulse_resetting[pair_index] = false;                            // reset the pulse flag so we can do it again!
-    }    
+    }
+
+    if (sample_entry_counter[pair_index].increment()) {
+      analysis_history[pair_index][analysis_history_index[pair_index].value] = pulse_signal;
+      analysis_history_index[pair_index].increment();
+    }
+     
   } 
 }
