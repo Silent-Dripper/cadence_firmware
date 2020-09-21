@@ -97,11 +97,11 @@ volatile unsigned long last_sample_time[NUM_PAIRS] = {0, 0}; // used to determin
 
 // these are used to detect when a finger is not there
 
-#define VALUE_INTO_ANALYSIS_EVERY_N_SAMPLES 10
+#define VALUE_INTO_ANALYSIS_EVERY_N_SAMPLES 15
 #define NUM_HISTORIC_ANALYSIS 400
-#define ANALYSIS_MIN_POSITIVE_THRESHOLD 200
-#define ANALYSIS_MAX_NEGATIVE_THRESHOLD 60
-#define MIN_DISTANCE_FROM_NEGATIVE_ANALYSIS 5000  // in ms
+#define ANALYSIS_MIN_POSITIVE_THRESHOLD 150
+#define ANALYSIS_MAX_NEGATIVE_THRESHOLD 50
+#define MIN_DISTANCE_FROM_NEGATIVE_ANALYSIS 5500  // in ms
 
 volatile int analysis_history[NUM_PAIRS][NUM_HISTORIC_ANALYSIS] = { 0 };
 wrapCounter analysis_history_index[NUM_PAIRS];
