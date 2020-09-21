@@ -41,7 +41,7 @@ For support:
   Debug and test mode config
 */
 
-#define DEBUG_MODE true
+#define DEBUG_MODE false
 
 /*
   Pin mappings
