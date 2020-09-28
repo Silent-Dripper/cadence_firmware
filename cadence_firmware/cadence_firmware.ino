@@ -1,6 +1,6 @@
 /*
 
-Cadence Driver - Version 4.1.0 - 9/20/2020
+Cadence Driver - Version 4.2.0 - 9/28/2020
 
 Trigger actuators (solenoids or pumps) based on human heartbeats via a pulse sensor or messages from a host PC.
 
@@ -61,11 +61,15 @@ For support:
 // Amount in milliseconds to hold solenoid on for if the actuator is a solenoid
 #define SOLENOID_ENABLE_TIME  100
 
-// PWM value and motor on time if actuator is a motor
-#define MOTOR_ENABLE_TIME 130
-#define MOTOR_PWM_VALUE 180
-
 #define STATUS_LED_BLINK_OFF_TIME 100 // in ms. The amount of time for the status LED to be off when displaying a blink pattern to the user
+
+// How long the pumps will be enabled in ms
+#define ACTUATOR_1_MOTOR_ENABLE_TIME 155
+#define ACTUATOR_2_MOTOR_ENABLE_TIME 153
+
+// The PWM value for the motor when it is enabled, will be passed to `analogWrite`
+#define ACTUATOR_1_MOTOR_PWM_VALUE 110
+#define ACTUATOR_2_MOTOR_PWM_VALUE 80
 
 #define ACTUATOR_1_SERIAL_CONTROL false
 #define ACTUATOR_2_SERIAL_CONTROL true
@@ -98,7 +102,10 @@ volatile unsigned long last_sample_time[NUM_PAIRS] = {0, 0}; // used to determin
 // these are used to detect when a finger is not there
 
 #define VALUE_INTO_ANALYSIS_EVERY_N_SAMPLES 15
-#define NUM_HISTORIC_ANALYSIS 400
+
+// Should be 400, but set to 300 because the pulse detection is disabled
+// TODO: Set this back to 400
+#define NUM_HISTORIC_ANALYSIS 300
 #define ANALYSIS_MIN_POSITIVE_THRESHOLD 150
 #define ANALYSIS_MAX_NEGATIVE_THRESHOLD 50
 #define MIN_DISTANCE_FROM_NEGATIVE_ANALYSIS 5500  // in ms
@@ -116,6 +123,8 @@ bool actuator_controlled_via_serial_port[NUM_PAIRS] = {ACTUATOR_1_SERIAL_CONTROL
 int pulse_sensor_pins[NUM_PAIRS] = {PULSE1_PIN, PULSE2_PIN};
 int actuator_pins[NUM_PAIRS] = {ACTUATOR1_PIN, ACTUATOR2_PIN}; 
 bool actuator_is_motor[NUM_PAIRS] = {ACTUATOR_1_MOTOR, ACTUATOR_2_MOTOR};
+int motor_enable_times[NUM_PAIRS] = {ACTUATOR_1_MOTOR_ENABLE_TIME, ACTUATOR_2_MOTOR_ENABLE_TIME};
+int motor_pwm_values[NUM_PAIRS] = {ACTUATOR_1_MOTOR_PWM_VALUE, ACTUATOR_2_MOTOR_PWM_VALUE};
 
 bool pulse_sensor_enabled[NUM_PAIRS] = { false , false };
 bool actuator_enabled[NUM_PAIRS] = {false, false};
@@ -165,7 +174,7 @@ float standard_deviation(volatile int * val, int array_length) {
 int lookup_actuator_enable_time(int actuator_index) {
   // TODO: could probably do this with a macro but not worth the complexity now
   if (actuator_is_motor[actuator_index]) {
-    return MOTOR_ENABLE_TIME;
+    return motor_enable_times[actuator_index];
   } else {
     return SOLENOID_ENABLE_TIME;
   }
@@ -176,7 +185,7 @@ void change_actuator_state(int actuator_index, bool enabled) {
   // TODO: could probably do this with a macro but not worth the complexity now
   if (actuator_is_motor[actuator_index]) {
     if (enabled) {
-      analogWrite(actuator_pins[actuator_index], MOTOR_PWM_VALUE);  
+      analogWrite(actuator_pins[actuator_index], motor_pwm_values[actuator_index]);  
     } else {
       analogWrite(actuator_pins[actuator_index], 0);  
     }
@@ -216,6 +225,10 @@ void update_is_person_attached_to_pulse_sensor(int sensor_index) {
     Serial.print(pulse_sensor_enabled[sensor_index]);
     Serial.println();
   #endif
+
+  // this is a hack, forces the pulse sensor to always be enabled.
+  // TODO: Resolve this and delete this line
+  pulse_sensor_enabled[sensor_index] = true; 
 
 }
 
@@ -289,7 +302,6 @@ void loop() {
         pulse_non_resetting[pair_index] = false;
         start_actuator = true; 
       }
-      
     }
 
     if (start_actuator) {
@@ -309,6 +321,7 @@ void loop() {
         }
       }
     }
+    
   }
 
 }

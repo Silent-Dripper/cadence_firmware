@@ -87,14 +87,15 @@ void setup() {
 
 void loop() {
 
-  const int pwm_value = 180;
-  const int motor_on_time = 130;
+  const int pwm_value = 153;
+  const int motor_on_time = 80;
   const int time_between_drips = 300;
 
   analogWrite(SOLENOID1_PIN, pwm_value);
-  //digitalWrite(SOLENOID2_PIN, HIGH);
+  analogWrite(SOLENOID2_PIN, pwm_value);
   delay(motor_on_time);
   digitalWrite(SOLENOID1_PIN, LOW);
+  digitalWrite(SOLENOID2_PIN, LOW);
   delay(time_between_drips);
 
 }
