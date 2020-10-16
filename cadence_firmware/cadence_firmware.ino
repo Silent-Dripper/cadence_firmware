@@ -41,22 +41,15 @@ For support:
   Debug and test mode config
 */
 
-#define DEBUG_MODE false
-
-/*
-  Pin mappings
-*/
-
-// Pins of all inputs and outputs
-#define  PULSE1_PIN A0
-#define  PULSE2_PIN A1
-#define  ACTUATOR1_PIN 11 // also soldered to 2
-#define  ACTUATOR2_PIN 3
-#define  STATUS_LED_PIN 5
+#define DEBUG_MODE true
 
 /*
   High level configuration constants
 */
+
+// If set to True, use the MOSFETs on the Cadence PCB to drive the solenoids or motors
+// If set to False, it is assumed that the Adafruit Motor Sheid v2 (https://www.adafruit.com/product/1438) is being used to drive the actuators
+#define ACTUATORS_CONTROLLED_WITH_MOSFET true
 
 // Amount in milliseconds to hold solenoid on for if the actuator is a solenoid
 #define SOLENOID_ENABLE_TIME  100
@@ -78,6 +71,28 @@ For support:
 #define ACTUATOR_2_MOTOR true
 
 /*
+  Pin mappings
+*/
+
+// Pins of all inputs and outputs
+#define  PULSE1_PIN A0
+#define  PULSE2_PIN A1
+
+#if ACTUATORS_CONTROLLED_WITH_MOSFET == true
+  #define  ACTUATOR1_PIN 11 // also soldered to 2
+  #define  ACTUATOR2_PIN 3
+#else
+  #include <Wire.h>
+  #include <Adafruit_MotorShield.h>
+  #include "utility/Adafruit_MS_PWMServoDriver.h"
+  Adafruit_MotorShield AFMS = Adafruit_MotorShield();
+  Adafruit_DCMotor *actuator_1 = AFMS.getMotor(1);
+  Adafruit_DCMotor *actuator_2 = AFMS.getMotor(2);
+#endif
+
+#define  STATUS_LED_PIN 5
+
+/*
   Communication Protocol Def
  */
 
@@ -94,7 +109,6 @@ For support:
 */
 
 #define NUM_PAIRS 2
-
 
 volatile unsigned long last_beat_time[NUM_PAIRS] = {0, 0};  // used to find the time between beats
 volatile unsigned long last_sample_time[NUM_PAIRS] = {0, 0}; // used to determine pulse timing
@@ -121,7 +135,13 @@ volatile boolean pulse_non_resetting[NUM_PAIRS] = {false, false}; // true when a
 
 bool actuator_controlled_via_serial_port[NUM_PAIRS] = {ACTUATOR_1_SERIAL_CONTROL, ACTUATOR_2_SERIAL_CONTROL};
 int pulse_sensor_pins[NUM_PAIRS] = {PULSE1_PIN, PULSE2_PIN};
-int actuator_pins[NUM_PAIRS] = {ACTUATOR1_PIN, ACTUATOR2_PIN}; 
+
+#if ACTUATORS_CONTROLLED_WITH_MOSFET == true
+  int actuator_pins[NUM_PAIRS] = {ACTUATOR1_PIN, ACTUATOR2_PIN};
+#else
+  Adafruit_DCMotor *actuator_controllers[NUM_PAIRS] = {actuator_1, actuator_2};
+#endif
+
 bool actuator_is_motor[NUM_PAIRS] = {ACTUATOR_1_MOTOR, ACTUATOR_2_MOTOR};
 int motor_enable_times[NUM_PAIRS] = {ACTUATOR_1_MOTOR_ENABLE_TIME, ACTUATOR_2_MOTOR_ENABLE_TIME};
 int motor_pwm_values[NUM_PAIRS] = {ACTUATOR_1_MOTOR_PWM_VALUE, ACTUATOR_2_MOTOR_PWM_VALUE};
@@ -185,21 +205,40 @@ void change_actuator_state(int actuator_index, bool enabled) {
   // TODO: could probably do this with a macro but not worth the complexity now
   if (actuator_is_motor[actuator_index]) {
     if (enabled) {
-      analogWrite(actuator_pins[actuator_index], motor_pwm_values[actuator_index]);  
+      #if ACTUATORS_CONTROLLED_WITH_MOSFET == true
+        analogWrite(actuator_pins[actuator_index], motor_pwm_values[actuator_index]);
+      #else
+        actuator_controllers[actuator_index]->setSpeed(motor_pwm_values[actuator_index]);
+        actuator_controllers[actuator_index]->run(FORWARD);
+      #endif
     } else {
-      analogWrite(actuator_pins[actuator_index], 0);  
+      #if ACTUATORS_CONTROLLED_WITH_MOSFET == true
+        analogWrite(actuator_pins[actuator_index], 0);
+      #else
+        actuator_controllers[actuator_index]->run(RELEASE);
+      #endif
     }
   } else {
-    digitalWrite(actuator_pins[actuator_index], enabled);
+      #if ACTUATORS_CONTROLLED_WITH_MOSFET == true
+        digitalWrite(actuator_pins[actuator_index], enabled);
+      #else
+        if (enabled) {
+          actuator_controllers[actuator_index]->setSpeed(255);
+          actuator_controllers[actuator_index]->run(FORWARD);
+        } else {
+          actuator_controllers[actuator_index]->run(RELEASE);
+        }
+      #endif
   }
 }
 
 void update_is_person_attached_to_pulse_sensor(int sensor_index) {
   
-  float std = standard_deviation(analysis_history[sensor_index], NUM_HISTORIC_ANALYSIS);
+  float current_standard_deviation = standard_deviation(analysis_history[sensor_index], NUM_HISTORIC_ANALYSIS);
+  float current_mean = mean(analysis_history[sensor_index], NUM_HISTORIC_ANALYSIS);
 
-  bool positive_analysis = (std >= ANALYSIS_MIN_POSITIVE_THRESHOLD);
-  bool negative_analysis = (std <= ANALYSIS_MAX_NEGATIVE_THRESHOLD);
+  bool positive_analysis = (current_standard_deviation >= ANALYSIS_MIN_POSITIVE_THRESHOLD);
+  bool negative_analysis = (current_standard_deviation <= ANALYSIS_MAX_NEGATIVE_THRESHOLD);
 
   unsigned long current_time = millis();
 
@@ -218,17 +257,22 @@ void update_is_person_attached_to_pulse_sensor(int sensor_index) {
   }
   
   #if DEBUG_MODE == true
-    Serial.print(std);
+    Serial.print(current_standard_deviation);
     Serial.print(",");
     Serial.print(ANALYSIS_MIN_POSITIVE_THRESHOLD);
     Serial.print(",");
     Serial.print(pulse_sensor_enabled[sensor_index]);
+    Serial.print(",");
+    Serial.print(analysis_history[sensor_index][analysis_history_index[sensor_index].value]);
+    Serial.print(",");
+    Serial.print(current_mean);
+    Serial.print(",");
     Serial.println();
   #endif
 
   // this is a hack, forces the pulse sensor to always be enabled.
   // TODO: Resolve this and delete this line
-  pulse_sensor_enabled[sensor_index] = true; 
+  pulse_sensor_enabled[sensor_index] = true;
 
 }
 
@@ -242,8 +286,13 @@ void setup() {
   ICR1 = 8000;   // TRIGGER TIMER INTERRUPT EVERY 1mS  
   sei();         // MAKE SURE GLOBAL INTERRUPTS ARE ENABLED
 
-  pinMode(ACTUATOR1_PIN, OUTPUT);
-  pinMode(ACTUATOR2_PIN, OUTPUT);
+  #if ACTUATORS_CONTROLLED_WITH_MOSFET == true
+    pinMode(ACTUATOR1_PIN, OUTPUT);
+    pinMode(ACTUATOR2_PIN, OUTPUT);
+  #else
+    AFMS.begin();
+  #endif
+
   pinMode(STATUS_LED_PIN, OUTPUT);
 
   for (int pair_index = 0; pair_index < NUM_PAIRS; pair_index++) {

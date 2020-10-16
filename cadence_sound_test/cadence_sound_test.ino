@@ -75,7 +75,19 @@ unsigned long solenoid_start[NUM_PAIRS] = {0, 0};
 int pulse_pins[NUM_PAIRS] = {PULSE1_PIN, PULSE2_PIN};
 int solenoid_pins[NUM_PAIRS] = {SOLENOID1_PIN, SOLENOID2_PIN}; 
 
+#define  PULSE1_PIN A0
+
 void setup() {
+
+  // Initializes Timer1 to throw an interrupt every 1mS.
+  TCCR1A = 0x00; // DISABLE OUTPUTS AND PWM ON DIGITAL PINS 9 & 10
+  TCCR1B = 0x11; // GO INTO 'PHASE AND FREQUENCY CORRECT' MODE, NO PRESCALER
+  TCCR1C = 0x00; // DON'T FORCE COMPARE
+  TIMSK1 = 0x01; // ENABLE OVERFLOW INTERRUPT (TOIE1)
+  ICR1 = 8000;   // TRIGGER TIMER INTERRUPT EVERY 1mS  
+  sei();         // MAKE SURE GLOBAL INTERRUPTS ARE ENABLED
+
+  TCCR2B = TCCR2B & B11111000 | B00000111;
   
   pinMode(SOLENOID1_PIN, OUTPUT);
   pinMode(SOLENOID2_PIN, OUTPUT);
@@ -89,7 +101,7 @@ void loop() {
 
   const int pwm_value = 153;
   const int motor_on_time = 80;
-  const int time_between_drips = 300;
+  const int time_between_drips = 100;
 
   analogWrite(SOLENOID1_PIN, pwm_value);
   analogWrite(SOLENOID2_PIN, pwm_value);
@@ -98,4 +110,9 @@ void loop() {
   digitalWrite(SOLENOID2_PIN, LOW);
   delay(time_between_drips);
 
+}
+
+ISR(TIMER1_OVF_vect) {
+  int pulse_signal = analogRead(PULSE1_PIN);   // read the pulse Sensor 
+  Serial.println(pulse_signal);
 }
