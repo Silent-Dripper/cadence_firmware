@@ -33,7 +33,6 @@ For support:
 #include "float.h"
 #include "wrapCounter.h"
 
-
 #define MIN_MEAN_ANALYSIS_VALUE 6000 // magic foo for seeing if someone is attached to sensor or not. See usage.
 #define MIN_FILTER_MS 1000  // control how often the algo for detecting if a human is attached to sensor or not runs
 
@@ -41,7 +40,18 @@ For support:
   Debug and test mode config
 */
 
-#define DEBUG_MODE true
+// If set to true, will print debug messages to the serial console
+#define DEBUG_MODE false
+
+// If set to True, both drippers will drip given the settings of sound_test_loop.
+// This should NEVER be enabled for production.
+#define SOUND_TEST_MODE_ENABLED false
+
+// Configure sending mock commands for testing
+// This should NEVER be enabled for production. 
+#define FAKE_COMMANDS_ENABLED true
+#define TIME_BETWEEN_FAKE_COMMANDS 200
+volatile unsigned long last_fake_command_time = 0;
 
 /*
   High level configuration constants
@@ -49,7 +59,7 @@ For support:
 
 // If set to True, use the MOSFETs on the Cadence PCB to drive the solenoids or motors
 // If set to False, it is assumed that the Adafruit Motor Sheid v2 (https://www.adafruit.com/product/1438) is being used to drive the actuators
-#define ACTUATORS_CONTROLLED_WITH_MOSFET true
+#define ACTUATORS_CONTROLLED_WITH_MOSFET false
 
 // Amount in milliseconds to hold solenoid on for if the actuator is a solenoid
 #define SOLENOID_ENABLE_TIME  100
@@ -67,8 +77,8 @@ For support:
 #define ACTUATOR_1_SERIAL_CONTROL false
 #define ACTUATOR_2_SERIAL_CONTROL true
 
-#define ACTUATOR_1_MOTOR true
-#define ACTUATOR_2_MOTOR true
+#define ACTUATOR_1_MOTOR false
+#define ACTUATOR_2_MOTOR false
 
 /*
   Pin mappings
@@ -113,18 +123,24 @@ For support:
 volatile unsigned long last_beat_time[NUM_PAIRS] = {0, 0};  // used to find the time between beats
 volatile unsigned long last_sample_time[NUM_PAIRS] = {0, 0}; // used to determine pulse timing
 
-// these are used to detect when a finger is not there
+// To avoid false positives
+#define MIN_TIME_BETWEEN_BEATS 400
+ 
+// In the feild, and using an osiclloscope, we expect the sensor to output the maximum voltage it can when a beat is seen. However, this is slightly lower than that to try and catch 100% of the beats
+#define PULSE_START_READING_MIN_THRESHOLD 900
+#define PULSE_FINISHED_READING_MAX_THRESHOLD 500
 
+#define NUM_SPOT_SAMPLES 2
+
+// these are used to detect when a finger is not there
 #define VALUE_INTO_ANALYSIS_EVERY_N_SAMPLES 15
 
-// Should be 400, but set to 300 because the pulse detection is disabled
-// TODO: Set this back to 400
-#define NUM_HISTORIC_ANALYSIS 300
-#define ANALYSIS_MIN_POSITIVE_THRESHOLD 150
+#define NUM_HISTORIC_ANALYSIS 150
+#define ANALYSIS_MIN_POSITIVE_THRESHOLD 110
 #define ANALYSIS_MAX_NEGATIVE_THRESHOLD 50
 #define MIN_DISTANCE_FROM_NEGATIVE_ANALYSIS 5500  // in ms
 
-volatile int analysis_history[NUM_PAIRS][NUM_HISTORIC_ANALYSIS] = { 0 };
+volatile float analysis_history[NUM_PAIRS][NUM_HISTORIC_ANALYSIS] = { 0 };
 wrapCounter analysis_history_index[NUM_PAIRS];
 wrapCounter sample_entry_counter[NUM_PAIRS];
 volatile unsigned long previous_negative_analysis_time[NUM_PAIRS] = { 0 };
@@ -163,7 +179,7 @@ void status_led_blink(int num_blinks, int on_time) {
 /*
  * Get the mean from an array of volatile long unsigned int
  */
-float mean(volatile int * val, int array_length) {
+float mean(volatile float * val, int array_length) {
   long unsigned int total = 0;
   for (int i = 0; i < array_length; i++) {
     total = total + val[i];
@@ -172,7 +188,7 @@ float mean(volatile int * val, int array_length) {
   return avg;
 }
 
-float variance(volatile int * val, int array_length) {
+float variance(volatile float * val, int array_length) {
   float avg = mean(val, array_length);
   long unsigned int total = 0;
   for (int i = 0; i < array_length; i++) {
@@ -185,7 +201,7 @@ float variance(volatile int * val, int array_length) {
 /*
  * Get the standard deviation from an array of volatile long unsigned int
  */
-float standard_deviation(volatile int * val, int array_length) {
+float standard_deviation(volatile float * val, int array_length) {
   float v = variance(val, array_length);
   float std_dev = sqrt(v);
   return std_dev;
@@ -202,7 +218,7 @@ int lookup_actuator_enable_time(int actuator_index) {
 }
 
 void change_actuator_state(int actuator_index, bool enabled) {
-  // TODO: could probably do this with a macro but not worth the complexity now
+
   if (actuator_is_motor[actuator_index]) {
     if (enabled) {
       #if ACTUATORS_CONTROLLED_WITH_MOSFET == true
@@ -272,8 +288,33 @@ void update_is_person_attached_to_pulse_sensor(int sensor_index) {
 
   // this is a hack, forces the pulse sensor to always be enabled.
   // TODO: Resolve this and delete this line
-  pulse_sensor_enabled[sensor_index] = true;
+  // pulse_sensor_enabled[sensor_index] = true;
 
+}
+
+void sound_test_loop() {
+  
+  const int motor_on_time = 80;
+  const int time_between_drips = 100;
+
+  while (true) {
+    change_actuator_state(0, true);
+    change_actuator_state(1, true);
+    delay(motor_on_time);
+    change_actuator_state(0, false);
+    change_actuator_state(1, false);
+    delay(time_between_drips);
+  }
+  
+}
+
+bool fake_command() {
+  unsigned long current_time = millis();
+  if (current_time - last_fake_command_time > TIME_BETWEEN_FAKE_COMMANDS) {
+    last_fake_command_time = current_time;
+    return true;
+  }
+  return false;
 }
 
 void setup() {
@@ -310,6 +351,10 @@ void setup() {
 }
 
 void loop() {
+  
+  #if SOUND_TEST_MODE_ENABLED == true
+    sound_test_loop();
+  #endif
 
   bool serial_actuator_enabled = false;
 
@@ -335,6 +380,11 @@ void loop() {
     }
     Serial.write(command);  // echo back
   }
+
+  #if FAKE_COMMANDS_ENABLED == true
+    serial_actuator_enabled |= fake_command();
+  #endif
+
 
   for (int pair_index = 0; pair_index < NUM_PAIRS; pair_index++) {
 
@@ -375,26 +425,33 @@ void loop() {
 
 }
 
+// THIS IS THE TIMER 1 INTERRUPT SERVICE ROUTINE. 
+// triggered every time Timer 1 overflows, every 1mS
 ISR(TIMER1_OVF_vect) {
-  // THIS IS THE TIMER 1 INTERRUPT SERVICE ROUTINE. 
-  // triggered every time Timer 1 overflows, every 1mS
+  
   for (int pair_index = 0; pair_index < NUM_PAIRS; pair_index++) {
 
-    int pulse_signal = analogRead(pulse_sensor_pins[pair_index]);   // read the pulse Sensor 
-    last_sample_time[pair_index]++;                            // keep track of the time with this variable (ISR triggered every 1mS
+    // Get a quick spot reading by taking multiple samples and passing along the average value
+    float pulse_signal = 0;
+    for (int i = 0; i < NUM_SPOT_SAMPLES; i++) {
+      pulse_signal = pulse_signal + analogRead(pulse_sensor_pins[pair_index]);
+    }
+    pulse_signal = pulse_signal / NUM_SPOT_SAMPLES;
+    
+    last_sample_time[pair_index]++;  // keep track of the time with this variable (ISR triggered every 1mS
 
     int time_delta = last_sample_time[pair_index] - last_beat_time[pair_index];  // monitor the time since the last beat to avoid noise
     
-    if ((pulse_signal > 520) && (pulse_resetting[pair_index] == false) && (time_delta > 400)) {            
+    if ((pulse_signal > PULSE_START_READING_MIN_THRESHOLD) && (pulse_resetting[pair_index] == false) && (time_delta > MIN_TIME_BETWEEN_BEATS)) {            
       
-      last_beat_time[pair_index] = last_sample_time[pair_index];   // keep track of time for next pulse
+      last_beat_time[pair_index] = last_sample_time[pair_index];  // keep track of time for next pulse
       
-      pulse_non_resetting[pair_index] = true;                 // set Quantified Self flag when beat is found and BPM gets updated, QS FLAG IS NOT CLEARED INSIDE THIS ISR
-      pulse_resetting[pair_index] = true;                     // set the pulse flag when we think there is a pulse
+      pulse_non_resetting[pair_index] = true;  // set Quantified Self flag when beat is found and BPM gets updated, QS FLAG IS NOT CLEARED INSIDE THIS ISR
+      pulse_resetting[pair_index] = true;  // set the pulse flag when we think there is a pulse
     }                       
 
-    if (pulse_signal < 500 && pulse_resetting[pair_index] == true) {  // when the values are going down, it's the time between beats
-      pulse_resetting[pair_index] = false;                            // reset the pulse flag so we can do it again!
+    if (pulse_signal < PULSE_FINISHED_READING_MAX_THRESHOLD && pulse_resetting[pair_index] == true) {  // when the values are going down, it's the time between beats
+      pulse_resetting[pair_index] = false;  // reset the pulse flag so we can do it again!
     }
 
     if (sample_entry_counter[pair_index].increment()) {
