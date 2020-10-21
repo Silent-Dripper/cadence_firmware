@@ -74,8 +74,8 @@ volatile unsigned long last_fake_command_time = 0;
 #define ACTUATOR_1_SERIAL_CONTROL false
 #define ACTUATOR_2_SERIAL_CONTROL true
 
-#define ACTUATOR_1_MOTOR false
-#define ACTUATOR_2_MOTOR false
+#define ACTUATOR_1_MOTOR true
+#define ACTUATOR_2_MOTOR true
 
 /*
   Pin mappings
@@ -282,11 +282,6 @@ void update_is_person_attached_to_pulse_sensor(int sensor_index) {
     Serial.print(",");
     Serial.println();
   #endif
-
-  // this is a hack, forces the pulse sensor to always be enabled.
-  // TODO: Resolve this and delete this line
-  // pulse_sensor_enabled[sensor_index] = true;
-
 }
 
 void sound_test_loop() {
