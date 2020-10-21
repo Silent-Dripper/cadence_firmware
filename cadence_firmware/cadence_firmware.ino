@@ -33,9 +33,6 @@ For support:
 #include "float.h"
 #include "wrapCounter.h"
 
-#define MIN_MEAN_ANALYSIS_VALUE 6000 // magic foo for seeing if someone is attached to sensor or not. See usage.
-#define MIN_FILTER_MS 1000  // control how often the algo for detecting if a human is attached to sensor or not runs
-
 /*
   Debug and test mode config
 */
@@ -49,7 +46,7 @@ For support:
 
 // Configure sending mock commands for testing
 // This should NEVER be enabled for production. 
-#define FAKE_COMMANDS_ENABLED true
+#define FAKE_COMMANDS_ENABLED false
 #define TIME_BETWEEN_FAKE_COMMANDS 200
 volatile unsigned long last_fake_command_time = 0;
 
@@ -85,12 +82,12 @@ volatile unsigned long last_fake_command_time = 0;
 */
 
 // Pins of all inputs and outputs
-#define  PULSE1_PIN A0
-#define  PULSE2_PIN A1
+#define PULSE1_PIN A0
+#define PULSE2_PIN A1
 
 #if ACTUATORS_CONTROLLED_WITH_MOSFET == true
-  #define  ACTUATOR1_PIN 11 // also soldered to 2
-  #define  ACTUATOR2_PIN 3
+  #define ACTUATOR1_PIN 11 // also soldered to 2
+  #define ACTUATOR2_PIN 3
 #else
   #include <Wire.h>
   #include <Adafruit_MotorShield.h>
@@ -100,7 +97,7 @@ volatile unsigned long last_fake_command_time = 0;
   Adafruit_DCMotor *actuator_2 = AFMS.getMotor(2);
 #endif
 
-#define  STATUS_LED_PIN 5
+#define STATUS_LED_PIN 5
 
 /*
   Communication Protocol Def
@@ -126,8 +123,8 @@ volatile unsigned long last_sample_time[NUM_PAIRS] = {0, 0}; // used to determin
 // To avoid false positives
 #define MIN_TIME_BETWEEN_BEATS 400
  
-// In the feild, and using an osiclloscope, we expect the sensor to output the maximum voltage it can when a beat is seen. However, this is slightly lower than that to try and catch 100% of the beats
-#define PULSE_START_READING_MIN_THRESHOLD 900
+// In the field, and using an osiclloscope, we expect the sensor to output the maximum voltage it can when a beat is seen. However, this is slightly lower than that to try and catch 100% of the beats
+#define PULSE_START_READING_MIN_THRESHOLD 630
 #define PULSE_FINISHED_READING_MAX_THRESHOLD 500
 
 #define NUM_SPOT_SAMPLES 2
@@ -138,7 +135,7 @@ volatile unsigned long last_sample_time[NUM_PAIRS] = {0, 0}; // used to determin
 #define NUM_HISTORIC_ANALYSIS 150
 #define ANALYSIS_MIN_POSITIVE_THRESHOLD 110
 #define ANALYSIS_MAX_NEGATIVE_THRESHOLD 50
-#define MIN_DISTANCE_FROM_NEGATIVE_ANALYSIS 5500  // in ms
+#define MIN_DISTANCE_FROM_NEGATIVE_ANALYSIS 3000  // in ms
 
 volatile float analysis_history[NUM_PAIRS][NUM_HISTORIC_ANALYSIS] = { 0 };
 wrapCounter analysis_history_index[NUM_PAIRS];
@@ -385,7 +382,6 @@ void loop() {
     serial_actuator_enabled |= fake_command();
   #endif
 
-
   for (int pair_index = 0; pair_index < NUM_PAIRS; pair_index++) {
 
     bool start_actuator = false;
@@ -443,9 +439,7 @@ ISR(TIMER1_OVF_vect) {
     int time_delta = last_sample_time[pair_index] - last_beat_time[pair_index];  // monitor the time since the last beat to avoid noise
     
     if ((pulse_signal > PULSE_START_READING_MIN_THRESHOLD) && (pulse_resetting[pair_index] == false) && (time_delta > MIN_TIME_BETWEEN_BEATS)) {            
-      
       last_beat_time[pair_index] = last_sample_time[pair_index];  // keep track of time for next pulse
-      
       pulse_non_resetting[pair_index] = true;  // set Quantified Self flag when beat is found and BPM gets updated, QS FLAG IS NOT CLEARED INSIDE THIS ISR
       pulse_resetting[pair_index] = true;  // set the pulse flag when we think there is a pulse
     }                       
