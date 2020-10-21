@@ -4,6 +4,7 @@
 
 * Added compiler switches to use the Adafruit Motor Shield v2 as the pump driver
 * Improved no-finger detection.
+* Added sketch to mess around with driving stepper motors.
 
 ## 4.2.0
 
