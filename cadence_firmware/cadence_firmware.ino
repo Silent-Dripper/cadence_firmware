@@ -1,6 +1,6 @@
 /*
 
-Cadence Driver - Version 4.2.0 - 9/28/2020
+Cadence Driver - Version 5.0.0 - 10/21/2020
 
 Trigger actuators (solenoids or pumps) based on human heartbeats via a pulse sensor or messages from a host PC.
 
@@ -33,30 +33,30 @@ For support:
 #include "float.h"
 #include "wrapCounter.h"
 
-
-#define MIN_MEAN_ANALYSIS_VALUE 6000 // magic foo for seeing if someone is attached to sensor or not. See usage.
-#define MIN_FILTER_MS 1000  // control how often the algo for detecting if a human is attached to sensor or not runs
-
 /*
   Debug and test mode config
 */
 
+// If set to true, will print debug messages to the serial console
 #define DEBUG_MODE false
 
-/*
-  Pin mappings
-*/
+// If set to True, both drippers will drip given the settings of sound_test_loop.
+// This should NEVER be enabled for production.
+#define SOUND_TEST_MODE_ENABLED false
 
-// Pins of all inputs and outputs
-#define  PULSE1_PIN A0
-#define  PULSE2_PIN A1
-#define  ACTUATOR1_PIN 11 // also soldered to 2
-#define  ACTUATOR2_PIN 3
-#define  STATUS_LED_PIN 5
+// Configure sending mock commands for testing
+// This should NEVER be enabled for production. 
+#define FAKE_COMMANDS_ENABLED false
+#define TIME_BETWEEN_FAKE_COMMANDS 200
+volatile unsigned long last_fake_command_time = 0;
 
 /*
   High level configuration constants
 */
+
+// If set to True, use the MOSFETs on the Cadence PCB to drive the solenoids or motors
+// If set to False, it is assumed that the Adafruit Motor Sheid v2 (https://www.adafruit.com/product/1438) is being used to drive the actuators
+#define ACTUATORS_CONTROLLED_WITH_MOSFET false
 
 // Amount in milliseconds to hold solenoid on for if the actuator is a solenoid
 #define SOLENOID_ENABLE_TIME  100
@@ -78,6 +78,28 @@ For support:
 #define ACTUATOR_2_MOTOR true
 
 /*
+  Pin mappings
+*/
+
+// Pins of all inputs and outputs
+#define PULSE1_PIN A0
+#define PULSE2_PIN A1
+
+#if ACTUATORS_CONTROLLED_WITH_MOSFET == true
+  #define ACTUATOR1_PIN 11 // also soldered to 2
+  #define ACTUATOR2_PIN 3
+#else
+  #include <Wire.h>
+  #include <Adafruit_MotorShield.h>
+  #include "utility/Adafruit_MS_PWMServoDriver.h"
+  Adafruit_MotorShield AFMS = Adafruit_MotorShield();
+  Adafruit_DCMotor *actuator_1 = AFMS.getMotor(1);
+  Adafruit_DCMotor *actuator_2 = AFMS.getMotor(2);
+#endif
+
+#define STATUS_LED_PIN 5
+
+/*
   Communication Protocol Def
  */
 
@@ -95,22 +117,27 @@ For support:
 
 #define NUM_PAIRS 2
 
-
 volatile unsigned long last_beat_time[NUM_PAIRS] = {0, 0};  // used to find the time between beats
 volatile unsigned long last_sample_time[NUM_PAIRS] = {0, 0}; // used to determine pulse timing
 
-// these are used to detect when a finger is not there
+// To avoid false positives
+#define MIN_TIME_BETWEEN_BEATS 400
+ 
+// In the field, and using an osiclloscope, we expect the sensor to output the maximum voltage it can when a beat is seen. However, this is slightly lower than that to try and catch 100% of the beats
+#define PULSE_START_READING_MIN_THRESHOLD 630
+#define PULSE_FINISHED_READING_MAX_THRESHOLD 500
 
+#define NUM_SPOT_SAMPLES 2
+
+// these are used to detect when a finger is not there
 #define VALUE_INTO_ANALYSIS_EVERY_N_SAMPLES 15
 
-// Should be 400, but set to 300 because the pulse detection is disabled
-// TODO: Set this back to 400
-#define NUM_HISTORIC_ANALYSIS 300
-#define ANALYSIS_MIN_POSITIVE_THRESHOLD 150
+#define NUM_HISTORIC_ANALYSIS 150
+#define ANALYSIS_MIN_POSITIVE_THRESHOLD 110
 #define ANALYSIS_MAX_NEGATIVE_THRESHOLD 50
-#define MIN_DISTANCE_FROM_NEGATIVE_ANALYSIS 5500  // in ms
+#define MIN_DISTANCE_FROM_NEGATIVE_ANALYSIS 3000  // in ms
 
-volatile int analysis_history[NUM_PAIRS][NUM_HISTORIC_ANALYSIS] = { 0 };
+volatile float analysis_history[NUM_PAIRS][NUM_HISTORIC_ANALYSIS] = { 0 };
 wrapCounter analysis_history_index[NUM_PAIRS];
 wrapCounter sample_entry_counter[NUM_PAIRS];
 volatile unsigned long previous_negative_analysis_time[NUM_PAIRS] = { 0 };
@@ -121,7 +148,13 @@ volatile boolean pulse_non_resetting[NUM_PAIRS] = {false, false}; // true when a
 
 bool actuator_controlled_via_serial_port[NUM_PAIRS] = {ACTUATOR_1_SERIAL_CONTROL, ACTUATOR_2_SERIAL_CONTROL};
 int pulse_sensor_pins[NUM_PAIRS] = {PULSE1_PIN, PULSE2_PIN};
-int actuator_pins[NUM_PAIRS] = {ACTUATOR1_PIN, ACTUATOR2_PIN}; 
+
+#if ACTUATORS_CONTROLLED_WITH_MOSFET == true
+  int actuator_pins[NUM_PAIRS] = {ACTUATOR1_PIN, ACTUATOR2_PIN};
+#else
+  Adafruit_DCMotor *actuator_controllers[NUM_PAIRS] = {actuator_1, actuator_2};
+#endif
+
 bool actuator_is_motor[NUM_PAIRS] = {ACTUATOR_1_MOTOR, ACTUATOR_2_MOTOR};
 int motor_enable_times[NUM_PAIRS] = {ACTUATOR_1_MOTOR_ENABLE_TIME, ACTUATOR_2_MOTOR_ENABLE_TIME};
 int motor_pwm_values[NUM_PAIRS] = {ACTUATOR_1_MOTOR_PWM_VALUE, ACTUATOR_2_MOTOR_PWM_VALUE};
@@ -143,7 +176,7 @@ void status_led_blink(int num_blinks, int on_time) {
 /*
  * Get the mean from an array of volatile long unsigned int
  */
-float mean(volatile int * val, int array_length) {
+float mean(volatile float * val, int array_length) {
   long unsigned int total = 0;
   for (int i = 0; i < array_length; i++) {
     total = total + val[i];
@@ -152,7 +185,7 @@ float mean(volatile int * val, int array_length) {
   return avg;
 }
 
-float variance(volatile int * val, int array_length) {
+float variance(volatile float * val, int array_length) {
   float avg = mean(val, array_length);
   long unsigned int total = 0;
   for (int i = 0; i < array_length; i++) {
@@ -165,7 +198,7 @@ float variance(volatile int * val, int array_length) {
 /*
  * Get the standard deviation from an array of volatile long unsigned int
  */
-float standard_deviation(volatile int * val, int array_length) {
+float standard_deviation(volatile float * val, int array_length) {
   float v = variance(val, array_length);
   float std_dev = sqrt(v);
   return std_dev;
@@ -182,24 +215,43 @@ int lookup_actuator_enable_time(int actuator_index) {
 }
 
 void change_actuator_state(int actuator_index, bool enabled) {
-  // TODO: could probably do this with a macro but not worth the complexity now
+
   if (actuator_is_motor[actuator_index]) {
     if (enabled) {
-      analogWrite(actuator_pins[actuator_index], motor_pwm_values[actuator_index]);  
+      #if ACTUATORS_CONTROLLED_WITH_MOSFET == true
+        analogWrite(actuator_pins[actuator_index], motor_pwm_values[actuator_index]);
+      #else
+        actuator_controllers[actuator_index]->setSpeed(motor_pwm_values[actuator_index]);
+        actuator_controllers[actuator_index]->run(FORWARD);
+      #endif
     } else {
-      analogWrite(actuator_pins[actuator_index], 0);  
+      #if ACTUATORS_CONTROLLED_WITH_MOSFET == true
+        analogWrite(actuator_pins[actuator_index], 0);
+      #else
+        actuator_controllers[actuator_index]->run(RELEASE);
+      #endif
     }
   } else {
-    digitalWrite(actuator_pins[actuator_index], enabled);
+      #if ACTUATORS_CONTROLLED_WITH_MOSFET == true
+        digitalWrite(actuator_pins[actuator_index], enabled);
+      #else
+        if (enabled) {
+          actuator_controllers[actuator_index]->setSpeed(255);
+          actuator_controllers[actuator_index]->run(FORWARD);
+        } else {
+          actuator_controllers[actuator_index]->run(RELEASE);
+        }
+      #endif
   }
 }
 
 void update_is_person_attached_to_pulse_sensor(int sensor_index) {
   
-  float std = standard_deviation(analysis_history[sensor_index], NUM_HISTORIC_ANALYSIS);
+  float current_standard_deviation = standard_deviation(analysis_history[sensor_index], NUM_HISTORIC_ANALYSIS);
+  float current_mean = mean(analysis_history[sensor_index], NUM_HISTORIC_ANALYSIS);
 
-  bool positive_analysis = (std >= ANALYSIS_MIN_POSITIVE_THRESHOLD);
-  bool negative_analysis = (std <= ANALYSIS_MAX_NEGATIVE_THRESHOLD);
+  bool positive_analysis = (current_standard_deviation >= ANALYSIS_MIN_POSITIVE_THRESHOLD);
+  bool negative_analysis = (current_standard_deviation <= ANALYSIS_MAX_NEGATIVE_THRESHOLD);
 
   unsigned long current_time = millis();
 
@@ -218,18 +270,43 @@ void update_is_person_attached_to_pulse_sensor(int sensor_index) {
   }
   
   #if DEBUG_MODE == true
-    Serial.print(std);
+    Serial.print(current_standard_deviation);
     Serial.print(",");
     Serial.print(ANALYSIS_MIN_POSITIVE_THRESHOLD);
     Serial.print(",");
     Serial.print(pulse_sensor_enabled[sensor_index]);
+    Serial.print(",");
+    Serial.print(analysis_history[sensor_index][analysis_history_index[sensor_index].value]);
+    Serial.print(",");
+    Serial.print(current_mean);
+    Serial.print(",");
     Serial.println();
   #endif
+}
 
-  // this is a hack, forces the pulse sensor to always be enabled.
-  // TODO: Resolve this and delete this line
-  pulse_sensor_enabled[sensor_index] = true; 
+void sound_test_loop() {
+  
+  const int motor_on_time = 80;
+  const int time_between_drips = 100;
 
+  while (true) {
+    change_actuator_state(0, true);
+    change_actuator_state(1, true);
+    delay(motor_on_time);
+    change_actuator_state(0, false);
+    change_actuator_state(1, false);
+    delay(time_between_drips);
+  }
+  
+}
+
+bool fake_command() {
+  unsigned long current_time = millis();
+  if (current_time - last_fake_command_time > TIME_BETWEEN_FAKE_COMMANDS) {
+    last_fake_command_time = current_time;
+    return true;
+  }
+  return false;
 }
 
 void setup() {
@@ -242,8 +319,13 @@ void setup() {
   ICR1 = 8000;   // TRIGGER TIMER INTERRUPT EVERY 1mS  
   sei();         // MAKE SURE GLOBAL INTERRUPTS ARE ENABLED
 
-  pinMode(ACTUATOR1_PIN, OUTPUT);
-  pinMode(ACTUATOR2_PIN, OUTPUT);
+  #if ACTUATORS_CONTROLLED_WITH_MOSFET == true
+    pinMode(ACTUATOR1_PIN, OUTPUT);
+    pinMode(ACTUATOR2_PIN, OUTPUT);
+  #else
+    AFMS.begin();
+  #endif
+
   pinMode(STATUS_LED_PIN, OUTPUT);
 
   for (int pair_index = 0; pair_index < NUM_PAIRS; pair_index++) {
@@ -261,6 +343,10 @@ void setup() {
 }
 
 void loop() {
+  
+  #if SOUND_TEST_MODE_ENABLED == true
+    sound_test_loop();
+  #endif
 
   bool serial_actuator_enabled = false;
 
@@ -286,6 +372,10 @@ void loop() {
     }
     Serial.write(command);  // echo back
   }
+
+  #if FAKE_COMMANDS_ENABLED == true
+    serial_actuator_enabled |= fake_command();
+  #endif
 
   for (int pair_index = 0; pair_index < NUM_PAIRS; pair_index++) {
 
@@ -326,26 +416,31 @@ void loop() {
 
 }
 
+// THIS IS THE TIMER 1 INTERRUPT SERVICE ROUTINE. 
+// triggered every time Timer 1 overflows, every 1mS
 ISR(TIMER1_OVF_vect) {
-  // THIS IS THE TIMER 1 INTERRUPT SERVICE ROUTINE. 
-  // triggered every time Timer 1 overflows, every 1mS
+  
   for (int pair_index = 0; pair_index < NUM_PAIRS; pair_index++) {
 
-    int pulse_signal = analogRead(pulse_sensor_pins[pair_index]);   // read the pulse Sensor 
-    last_sample_time[pair_index]++;                            // keep track of the time with this variable (ISR triggered every 1mS
+    // Get a quick spot reading by taking multiple samples and passing along the average value
+    float pulse_signal = 0;
+    for (int i = 0; i < NUM_SPOT_SAMPLES; i++) {
+      pulse_signal = pulse_signal + analogRead(pulse_sensor_pins[pair_index]);
+    }
+    pulse_signal = pulse_signal / NUM_SPOT_SAMPLES;
+    
+    last_sample_time[pair_index]++;  // keep track of the time with this variable (ISR triggered every 1mS
 
     int time_delta = last_sample_time[pair_index] - last_beat_time[pair_index];  // monitor the time since the last beat to avoid noise
     
-    if ((pulse_signal > 520) && (pulse_resetting[pair_index] == false) && (time_delta > 400)) {            
-      
-      last_beat_time[pair_index] = last_sample_time[pair_index];   // keep track of time for next pulse
-      
-      pulse_non_resetting[pair_index] = true;                 // set Quantified Self flag when beat is found and BPM gets updated, QS FLAG IS NOT CLEARED INSIDE THIS ISR
-      pulse_resetting[pair_index] = true;                     // set the pulse flag when we think there is a pulse
+    if ((pulse_signal > PULSE_START_READING_MIN_THRESHOLD) && (pulse_resetting[pair_index] == false) && (time_delta > MIN_TIME_BETWEEN_BEATS)) {            
+      last_beat_time[pair_index] = last_sample_time[pair_index];  // keep track of time for next pulse
+      pulse_non_resetting[pair_index] = true;  // set Quantified Self flag when beat is found and BPM gets updated, QS FLAG IS NOT CLEARED INSIDE THIS ISR
+      pulse_resetting[pair_index] = true;  // set the pulse flag when we think there is a pulse
     }                       
 
-    if (pulse_signal < 500 && pulse_resetting[pair_index] == true) {  // when the values are going down, it's the time between beats
-      pulse_resetting[pair_index] = false;                            // reset the pulse flag so we can do it again!
+    if (pulse_signal < PULSE_FINISHED_READING_MAX_THRESHOLD && pulse_resetting[pair_index] == true) {  // when the values are going down, it's the time between beats
+      pulse_resetting[pair_index] = false;  // reset the pulse flag so we can do it again!
     }
 
     if (sample_entry_counter[pair_index].increment()) {
