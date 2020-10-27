@@ -56,7 +56,7 @@ volatile unsigned long last_fake_command_time = 0;
 
 // If set to True, use the MOSFETs on the Cadence PCB to drive the solenoids or motors
 // If set to False, it is assumed that the Adafruit Motor Sheid v2 (https://www.adafruit.com/product/1438) is being used to drive the actuators
-#define ACTUATORS_CONTROLLED_WITH_MOSFET false
+#define ACTUATORS_CONTROLLED_WITH_MOSFET true
 
 // Amount in milliseconds to hold solenoid on for if the actuator is a solenoid
 #define SOLENOID_ENABLE_TIME  100
@@ -370,11 +370,13 @@ void loop() {
         break;
       case COMMAND_PULSE_LED:
         digitalWrite(STATUS_LED_PIN, HIGH);
+        serial_actuator_enabled = true;
         most_recent_drip_command_type = true;
         serial_message_needs_responding_to = true;
         most_recent_drip_command_type = COMMAND_PULSE_LED;
         break;
       case COMMAND_PULSE_NO_LED:
+        serial_actuator_enabled = true;
         most_recent_drip_command_type = true;
         serial_message_needs_responding_to = true;
         most_recent_drip_command_type = COMMAND_PULSE_NO_LED;
