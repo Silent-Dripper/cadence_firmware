@@ -384,7 +384,8 @@ void loop() {
 
   #if FAKE_COMMANDS_ENABLED == true
     serial_actuator_enabled |= fake_command();
-    serial_message_responded_to = false;
+    // there isn't going to be a host here but we still want to fake it
+    serial_message_responded_to = true;
     drip_command_type = COMMAND_PULSE_NO_LED;
   #endif
 
@@ -417,7 +418,6 @@ void loop() {
       if (millis() - actuation_start_time[pair_index] > lookup_actuator_enable_time(pair_index)) {
         change_actuator_state(pair_index, LOW);
         actuator_enabled[pair_index] = false;
-        
         if (actuator_controlled_via_serial_port[pair_index] == true) {
           digitalWrite(STATUS_LED_PIN, LOW);
           if (serial_message_needs_responding_to) {
@@ -425,7 +425,6 @@ void loop() {
             serial_message_needs_responding_to = true;
           }
         }
-        
       }
     }
     
