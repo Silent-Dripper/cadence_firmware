@@ -163,6 +163,9 @@ bool pulse_sensor_enabled[NUM_PAIRS] = { false , false };
 bool actuator_enabled[NUM_PAIRS] = {false, false};
 volatile unsigned long actuation_start_time[NUM_PAIRS] = {0, 0};
 
+int most_recent_drip_command_type;
+bool serial_message_needs_responding_to = false;
+
 void status_led_blink(int num_blinks, int on_time) {
   // Blink the LED in a given pattern. Indicates to user how things are going.
   for (int i = 0; i < num_blinks; i++) {
@@ -336,7 +339,7 @@ void setup() {
     for (int sample_index = 0; sample_index < NUM_HISTORIC_ANALYSIS; sample_index++) {
       analysis_history[pair_index][sample_index] = analogRead(pulse_sensor_pins[pair_index]);
     }
-  }
+  } 
 
   Serial.begin(115200);
 
@@ -355,26 +358,34 @@ void loop() {
     byte command = Serial.read();
     switch (command) {
       case COMMAND_HEARTBEAT:
+        Serial.write(COMMAND_HEARTBEAT);  // echo back
         break;
       case COMMAND_SERVICE_STARTED:
         status_led_blink(3, 300);  // three short blinks when we expect to start processing commands.
+        Serial.write(COMMAND_SERVICE_STARTED);  // echo back
         break;
       case COMMAND_SERVICE_CRASHED:
         status_led_blink(2, 1000); // two long blinks if something bad happens on the pi end of things.
+        Serial.write(COMMAND_SERVICE_CRASHED);  // echo back
         break;
       case COMMAND_PULSE_LED:
-        serial_actuator_enabled = true;
         digitalWrite(STATUS_LED_PIN, HIGH);
+        most_recent_drip_command_type = true;
+        serial_message_needs_responding_to = true;
+        most_recent_drip_command_type = COMMAND_PULSE_LED;
         break;
       case COMMAND_PULSE_NO_LED:
-        serial_actuator_enabled = true;
+        most_recent_drip_command_type = true;
+        serial_message_needs_responding_to = true;
+        most_recent_drip_command_type = COMMAND_PULSE_NO_LED;
         break;
     }
-    Serial.write(command);  // echo back
   }
 
   #if FAKE_COMMANDS_ENABLED == true
     serial_actuator_enabled |= fake_command();
+    serial_message_responded_to = false;
+    drip_command_type = COMMAND_PULSE_NO_LED;
   #endif
 
   for (int pair_index = 0; pair_index < NUM_PAIRS; pair_index++) {
@@ -406,9 +417,15 @@ void loop() {
       if (millis() - actuation_start_time[pair_index] > lookup_actuator_enable_time(pair_index)) {
         change_actuator_state(pair_index, LOW);
         actuator_enabled[pair_index] = false;
+        
         if (actuator_controlled_via_serial_port[pair_index] == true) {
           digitalWrite(STATUS_LED_PIN, LOW);
+          if (serial_message_needs_responding_to) {
+            Serial.write(most_recent_drip_command_type);
+            serial_message_needs_responding_to = true;
+          }
         }
+        
       }
     }
     
