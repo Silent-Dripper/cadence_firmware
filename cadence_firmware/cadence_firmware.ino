@@ -339,7 +339,7 @@ void setup() {
     for (int sample_index = 0; sample_index < NUM_HISTORIC_ANALYSIS; sample_index++) {
       analysis_history[pair_index][sample_index] = analogRead(pulse_sensor_pins[pair_index]);
     }
-  } 
+  }
 
   Serial.begin(115200);
 
