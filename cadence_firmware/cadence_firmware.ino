@@ -1,6 +1,6 @@
 /*
 
-Cadence Driver - Version 5.0.0 - 10/21/2020
+Cadence Driver - Version 5.1.0 - 10/27/2020
 
 Trigger actuators (solenoids or pumps) based on human heartbeats via a pulse sensor or messages from a host PC.
 
@@ -56,7 +56,7 @@ volatile unsigned long last_fake_command_time = 0;
 
 // If set to True, use the MOSFETs on the Cadence PCB to drive the solenoids or motors
 // If set to False, it is assumed that the Adafruit Motor Sheid v2 (https://www.adafruit.com/product/1438) is being used to drive the actuators
-#define ACTUATORS_CONTROLLED_WITH_MOSFET true
+#define ACTUATORS_CONTROLLED_WITH_MOSFET false
 
 // Amount in milliseconds to hold solenoid on for if the actuator is a solenoid
 #define SOLENOID_ENABLE_TIME  100
