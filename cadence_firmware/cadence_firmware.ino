@@ -1,6 +1,6 @@
 /*
 
-Cadence Driver - Version 5.0.0 - 10/21/2020
+Cadence Driver - Version 5.1.0 - 10/27/2020
 
 Trigger actuators (solenoids or pumps) based on human heartbeats via a pulse sensor or messages from a host PC.
 
@@ -162,6 +162,9 @@ int motor_pwm_values[NUM_PAIRS] = {ACTUATOR_1_MOTOR_PWM_VALUE, ACTUATOR_2_MOTOR_
 bool pulse_sensor_enabled[NUM_PAIRS] = { false , false };
 bool actuator_enabled[NUM_PAIRS] = {false, false};
 volatile unsigned long actuation_start_time[NUM_PAIRS] = {0, 0};
+
+int most_recent_drip_command_type;
+bool serial_message_needs_responding_to = false;
 
 void status_led_blink(int num_blinks, int on_time) {
   // Blink the LED in a given pattern. Indicates to user how things are going.
@@ -355,26 +358,37 @@ void loop() {
     byte command = Serial.read();
     switch (command) {
       case COMMAND_HEARTBEAT:
+        Serial.write(COMMAND_HEARTBEAT);  // echo back
         break;
       case COMMAND_SERVICE_STARTED:
         status_led_blink(3, 300);  // three short blinks when we expect to start processing commands.
+        Serial.write(COMMAND_SERVICE_STARTED);  // echo back
         break;
       case COMMAND_SERVICE_CRASHED:
         status_led_blink(2, 1000); // two long blinks if something bad happens on the pi end of things.
+        Serial.write(COMMAND_SERVICE_CRASHED);  // echo back
         break;
       case COMMAND_PULSE_LED:
-        serial_actuator_enabled = true;
         digitalWrite(STATUS_LED_PIN, HIGH);
+        serial_actuator_enabled = true;
+        most_recent_drip_command_type = true;
+        serial_message_needs_responding_to = true;
+        most_recent_drip_command_type = COMMAND_PULSE_LED;
         break;
       case COMMAND_PULSE_NO_LED:
         serial_actuator_enabled = true;
+        most_recent_drip_command_type = true;
+        serial_message_needs_responding_to = true;
+        most_recent_drip_command_type = COMMAND_PULSE_NO_LED;
         break;
     }
-    Serial.write(command);  // echo back
   }
 
   #if FAKE_COMMANDS_ENABLED == true
     serial_actuator_enabled |= fake_command();
+    // there isn't going to be a host here but we still want to fake it
+    serial_message_responded_to = true;
+    drip_command_type = COMMAND_PULSE_NO_LED;
   #endif
 
   for (int pair_index = 0; pair_index < NUM_PAIRS; pair_index++) {
@@ -408,6 +422,10 @@ void loop() {
         actuator_enabled[pair_index] = false;
         if (actuator_controlled_via_serial_port[pair_index] == true) {
           digitalWrite(STATUS_LED_PIN, LOW);
+          if (serial_message_needs_responding_to) {
+            Serial.write(most_recent_drip_command_type);
+            serial_message_needs_responding_to = true;
+          }
         }
       }
     }
