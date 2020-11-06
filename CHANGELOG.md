@@ -1,5 +1,9 @@
 # Changelog
 
+## 5.2.0 - (2020-10-28)
+
+* Set different enable times/pwm values depending on if the firmware is using the Adafruit Motor Sheild v2 or the MOSFETs on the Cadence PCB.
+
 ## 5.1.0 - (2020-10-27)
 
 * Commands will not be echo'd back to the host until they have been completed by the Arduino and can accept another command.
