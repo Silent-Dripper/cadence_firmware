@@ -63,13 +63,20 @@ volatile unsigned long last_fake_command_time = 0;
 
 #define STATUS_LED_BLINK_OFF_TIME 100 // in ms. The amount of time for the status LED to be off when displaying a blink pattern to the user
 
-// How long the pumps will be enabled in ms
-#define ACTUATOR_1_MOTOR_ENABLE_TIME 155
-#define ACTUATOR_2_MOTOR_ENABLE_TIME 153
-
-// The PWM value for the motor when it is enabled, will be passed to `analogWrite`
-#define ACTUATOR_1_MOTOR_PWM_VALUE 110
-#define ACTUATOR_2_MOTOR_PWM_VALUE 80
+// Enable time is how long the motors will be on for a drip.
+// PWM value is the analogWirte value written to the controller. This is how "fast" the motor will spin.
+// These values must be tuned manually through experimentation
+#if ACTUATORS_CONTROLLED_WITH_MOSFET == true
+  #define ACTUATOR_1_MOTOR_ENABLE_TIME 155
+  #define ACTUATOR_2_MOTOR_ENABLE_TIME 153
+  #define ACTUATOR_1_MOTOR_PWM_VALUE 110
+  #define ACTUATOR_2_MOTOR_PWM_VALUE 80
+#else
+  #define ACTUATOR_1_MOTOR_ENABLE_TIME 155
+  #define ACTUATOR_2_MOTOR_ENABLE_TIME 155
+  #define ACTUATOR_1_MOTOR_PWM_VALUE 150
+  #define ACTUATOR_2_MOTOR_PWM_VALUE 150
+#endif
 
 #define ACTUATOR_1_SERIAL_CONTROL false
 #define ACTUATOR_2_SERIAL_CONTROL true
