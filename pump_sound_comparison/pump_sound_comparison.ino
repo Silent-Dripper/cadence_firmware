@@ -114,8 +114,11 @@ void setup() {
 bool shaft = false;
 
 void loop() {
-
+  mosfet_1_test();
+  delay(500);
   mosfet_2_test();
-
+  delay(500);
+  mosfet_3_test();
+  delay(500);
   
 }
