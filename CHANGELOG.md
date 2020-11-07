@@ -1,6 +1,6 @@
 # Changelog
 
-## 5.2.0 - (2020-10-28)
+## 5.2.0 - (2020-11-7)
 
 * Set different enable times/pwm values depending on if the firmware is using the Adafruit Motor Sheild v2 or the MOSFETs on the Cadence PCB.
 * Sound comparison script can drive steppers via TMCs and DC's via the prod mosfets.
