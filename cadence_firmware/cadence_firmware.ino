@@ -1,7 +1,4 @@
 /*
-
-Cadence Driver - Version 5.1.0 - 10/27/2020
-
 Trigger actuators (solenoids or pumps) based on human heartbeats via a pulse sensor or messages from a host PC.
 
 Pins:
@@ -27,10 +24,8 @@ Usage Notes:
       
 For support:
     dev@esologic.com
-
 */
 
-#include "float.h"
 #include "wrapCounter.h"
 
 /*
@@ -46,17 +41,22 @@ For support:
 
 // Configure sending mock commands for testing
 // This should NEVER be enabled for production. 
-#define FAKE_COMMANDS_ENABLED false
-#define TIME_BETWEEN_FAKE_COMMANDS 200
-volatile unsigned long last_fake_command_time = 0;
+#define FAKE_COMMANDS_ENABLED true
+#define TIME_BETWEEN_FAKE_COMMANDS 500
+#if FAKE_COMMANDS_ENABLED == true
+  volatile unsigned long last_fake_command_time = 0;
+#endif 
 
 /*
   High level configuration constants
 */
 
-// If set to True, use the MOSFETs on the Cadence PCB to drive the solenoids or motors
-// If set to False, it is assumed that the Adafruit Motor Sheid v2 (https://www.adafruit.com/product/1438) is being used to drive the actuators
-#define ACTUATORS_CONTROLLED_WITH_MOSFET false
+#define AC_MOSFET 0  // Use the MOSFETs on the Cadence PCB to drive the solenoids or motors
+#define AC_MOTOR_SHIELD 1  // Use the Adafruit Motor Sheid v2 (https://www.adafruit.com/product/1438) to drive the actuators
+#define AC_TMC2208 2 // Use the TMC2208s on the Dripper PCB to drive the Stepper Motors, the MaschinenReich XP88-ST01
+
+// Set this to one of the options above
+#define ACTUATORS_CONTROL_MODE AC_TMC2208
 
 // Amount in milliseconds to hold solenoid on for if the actuator is a solenoid
 #define SOLENOID_ENABLE_TIME  100
@@ -66,16 +66,24 @@ volatile unsigned long last_fake_command_time = 0;
 // Enable time is how long the motors will be on for a drip.
 // PWM value is the analogWirte value written to the controller. This is how "fast" the motor will spin.
 // These values must be tuned manually through experimentation
-#if ACTUATORS_CONTROLLED_WITH_MOSFET == true
+#if ACTUATORS_CONTROL_MODE == AC_MOSFET
   #define ACTUATOR_1_MOTOR_ENABLE_TIME 155
   #define ACTUATOR_2_MOTOR_ENABLE_TIME 153
-  #define ACTUATOR_1_MOTOR_PWM_VALUE 110
-  #define ACTUATOR_2_MOTOR_PWM_VALUE 80
-#else
+  #define ACTUATOR_1_MOTOR_DRIVE_STRENGTH 110
+  #define ACTUATOR_2_MOTOR_DRIVE_STRENGTH 80
+#elif ACTUATORS_CONTROL_MODE == AC_MOTOR_SHIELD
   #define ACTUATOR_1_MOTOR_ENABLE_TIME 155
   #define ACTUATOR_2_MOTOR_ENABLE_TIME 155
-  #define ACTUATOR_1_MOTOR_PWM_VALUE 150
-  #define ACTUATOR_2_MOTOR_PWM_VALUE 150
+  #define ACTUATOR_1_MOTOR_DRIVE_STRENGTH 150
+  #define ACTUATOR_2_MOTOR_DRIVE_STRENGTH 150
+#elif ACTUATORS_CONTROL_MODE == AC_TMC2208
+  #define ACTUATOR_1_MOTOR_ENABLE_TIME 200
+  #define ACTUATOR_2_MOTOR_ENABLE_TIME 200
+  // These will be passed as VACTUAL
+  #define ACTUATOR_1_MOTOR_DRIVE_STRENGTH 200
+  #define ACTUATOR_2_MOTOR_DRIVE_STRENGTH 200
+#else
+  #error "Invalid ACTUATORS_CONTROL_MODE"
 #endif
 
 #define ACTUATOR_1_SERIAL_CONTROL false
@@ -83,6 +91,16 @@ volatile unsigned long last_fake_command_time = 0;
 
 #define ACTUATOR_1_MOTOR true
 #define ACTUATOR_2_MOTOR true
+
+// We can't drive non-motors with TMC2208, so stop compilation if user tries to configure this
+#if ACTUATORS_CONTROL_MODE == AC_TMC2208
+  #if ACTUATOR_1_MOTOR == false
+    #error "Non-motors cannot be driven with TMC2208, Actuator 1 will not work."
+  #endif
+  #if ACTUATOR_2_MOTOR == false
+    #error "Non-motors cannot be driven with TMC2208, Actuator 2 will not work."
+  #endif
+#endif
 
 /*
   Pin mappings
@@ -92,16 +110,54 @@ volatile unsigned long last_fake_command_time = 0;
 #define PULSE1_PIN A0
 #define PULSE2_PIN A1
 
-#if ACTUATORS_CONTROLLED_WITH_MOSFET == true
+#define NUM_PAIRS 2
+
+#if ACTUATORS_CONTROL_MODE == AC_MOSFET
   #define ACTUATOR1_PIN 11 // also soldered to 2
   #define ACTUATOR2_PIN 3
-#else
+  int actuator_pins[NUM_PAIRS] = {ACTUATOR1_PIN, ACTUATOR2_PIN};
+#elif ACTUATORS_CONTROL_MODE == AC_MOTOR_SHIELD
   #include <Wire.h>
   #include <Adafruit_MotorShield.h>
   #include "utility/Adafruit_MS_PWMServoDriver.h"
   Adafruit_MotorShield AFMS = Adafruit_MotorShield();
   Adafruit_DCMotor *actuator_1 = AFMS.getMotor(1);
   Adafruit_DCMotor *actuator_2 = AFMS.getMotor(2);
+  Adafruit_DCMotor *actuator_controllers[NUM_PAIRS] = {actuator_1, actuator_2};
+#elif ACTUATORS_CONTROL_MODE == AC_TMC2208
+
+  #include <TMCStepper.h>
+
+  #define TMC_BAUD_RATE 115200
+  #define TMC_PDN_DISABLE true
+  #define TMC_I_SCALE_ANALOG 0
+  #define TMC_RMS_CURRENT 1000
+  #define TMC_MICROSTEPS 0
+  #define TMC_IRUN 5
+  #define TMC_IHOLD 5
+  #define TMC_GSTAT 0b111
+  
+  #define TMC_1_SW_TX 2  // TMC2208 SoftwareSerial transmit pin
+  #define TMC_1_SW_RX 3  // TMC2208 SoftwareSerial receive pin
+  #define TMC_1_STEP_PIN 4  // Step
+  #define TMC_1_DIR_PIN 5  // Direction
+  #define TMC_1_EN_PIN 6  // Enable
+
+  #define TMC_2_SW_TX 7  // TMC2208 SoftwareSerial transmit pin
+  #define TMC_2_SW_RX 8  // TMC2208 SoftwareSerial receive pin
+  #define TMC_2_STEP_PIN 9  // Step
+  #define TMC_2_DIR_PIN 10  // Direction
+  #define TMC_2_EN_PIN 11  // Enable
+  
+  #define R_SENSE 0.11f  // SilentStepStick series use 0.11
+
+  TMC2208Stepper tmc_1 = TMC2208Stepper(TMC_1_SW_RX, TMC_1_SW_TX, R_SENSE); // Software serial
+  TMC2208Stepper tmc_2 = TMC2208Stepper(TMC_2_SW_RX, TMC_2_SW_TX, R_SENSE); // Software serial
+  TMC2208Stepper tmc_controllers[NUM_PAIRS] = { tmc_1, tmc_2 };
+  int tmc_enable_pins[NUM_PAIRS] = { TMC_1_EN_PIN, TMC_2_EN_PIN }; 
+
+#else
+  #error "Invalid ACTUATORS_CONTROL_MODE"
 #endif
 
 #define STATUS_LED_PIN 5
@@ -121,8 +177,6 @@ volatile unsigned long last_fake_command_time = 0;
 /*
   Program Body
 */
-
-#define NUM_PAIRS 2
 
 volatile unsigned long last_beat_time[NUM_PAIRS] = {0, 0};  // used to find the time between beats
 volatile unsigned long last_sample_time[NUM_PAIRS] = {0, 0}; // used to determine pulse timing
@@ -156,15 +210,9 @@ volatile boolean pulse_non_resetting[NUM_PAIRS] = {false, false}; // true when a
 bool actuator_controlled_via_serial_port[NUM_PAIRS] = {ACTUATOR_1_SERIAL_CONTROL, ACTUATOR_2_SERIAL_CONTROL};
 int pulse_sensor_pins[NUM_PAIRS] = {PULSE1_PIN, PULSE2_PIN};
 
-#if ACTUATORS_CONTROLLED_WITH_MOSFET == true
-  int actuator_pins[NUM_PAIRS] = {ACTUATOR1_PIN, ACTUATOR2_PIN};
-#else
-  Adafruit_DCMotor *actuator_controllers[NUM_PAIRS] = {actuator_1, actuator_2};
-#endif
-
 bool actuator_is_motor[NUM_PAIRS] = {ACTUATOR_1_MOTOR, ACTUATOR_2_MOTOR};
 int motor_enable_times[NUM_PAIRS] = {ACTUATOR_1_MOTOR_ENABLE_TIME, ACTUATOR_2_MOTOR_ENABLE_TIME};
-int motor_pwm_values[NUM_PAIRS] = {ACTUATOR_1_MOTOR_PWM_VALUE, ACTUATOR_2_MOTOR_PWM_VALUE};
+int motor_drive_strengths[NUM_PAIRS] = {ACTUATOR_1_MOTOR_DRIVE_STRENGTH, ACTUATOR_2_MOTOR_DRIVE_STRENGTH};
 
 bool pulse_sensor_enabled[NUM_PAIRS] = { false , false };
 bool actuator_enabled[NUM_PAIRS] = {false, false};
@@ -226,25 +274,37 @@ int lookup_actuator_enable_time(int actuator_index) {
 
 void change_actuator_state(int actuator_index, bool enabled) {
 
+  if (actuator_index == 1) {
+    Serial.print(actuator_index);
+    Serial.print(", ");
+    Serial.println(enabled);
+  }
+
   if (actuator_is_motor[actuator_index]) {
-    if (enabled) {
-      #if ACTUATORS_CONTROLLED_WITH_MOSFET == true
-        analogWrite(actuator_pins[actuator_index], motor_pwm_values[actuator_index]);
-      #else
-        actuator_controllers[actuator_index]->setSpeed(motor_pwm_values[actuator_index]);
+    if (enabled) { // we want the motor to spin
+      #if ACTUATORS_CONTROL_MODE == AC_MOSFET
+        analogWrite(actuator_pins[actuator_index], motor_drive_strengths[actuator_index]);
+      #elif ACTUATORS_CONTROL_MODE == AC_MOTOR_SHIELD
+        actuator_controllers[actuator_index]->setSpeed(motor_drive_strengths[actuator_index]);
         actuator_controllers[actuator_index]->run(FORWARD);
+      #elif ACTUATORS_CONTROL_MODE == AC_TMC2208
+        digitalWrite(tmc_enable_pins[actuator_index], LOW);  // enable the driver
+        tmc_controllers[actuator_index].VACTUAL(motor_drive_strengths[actuator_index]);
       #endif
-    } else {
-      #if ACTUATORS_CONTROLLED_WITH_MOSFET == true
+    } else { // we want the motor to stop spinning
+      #if ACTUATORS_CONTROL_MODE == AC_MOSFET
         analogWrite(actuator_pins[actuator_index], 0);
-      #else
+      #elif ACTUATORS_CONTROL_MODE == AC_MOTOR_SHIELD
         actuator_controllers[actuator_index]->run(RELEASE);
+      #elif ACTUATORS_CONTROL_MODE == AC_TMC2208
+        tmc_controllers[actuator_index].VACTUAL(0);
+        digitalWrite(tmc_enable_pins[actuator_index], HIGH);  // disable the driver
       #endif
     }
-  } else {
-      #if ACTUATORS_CONTROLLED_WITH_MOSFET == true
+  } else { // meaning the actuator is a solenoid or something similar
+      #if ACTUATORS_CONTROL_MODE == AC_MOSFET
         digitalWrite(actuator_pins[actuator_index], enabled);
-      #else
+      #elif ACTUATORS_CONTROL_MODE == AC_MOTOR_SHIELD
         if (enabled) {
           actuator_controllers[actuator_index]->setSpeed(255);
           actuator_controllers[actuator_index]->run(FORWARD);
@@ -294,30 +354,31 @@ void update_is_person_attached_to_pulse_sensor(int sensor_index) {
   #endif
 }
 
-void sound_test_loop() {
-  
-  const int motor_on_time = 80;
-  const int time_between_drips = 100;
-
-  while (true) {
-    change_actuator_state(0, true);
-    change_actuator_state(1, true);
-    delay(motor_on_time);
-    change_actuator_state(0, false);
-    change_actuator_state(1, false);
-    delay(time_between_drips);
+#if SOUND_TEST_MODE_ENABLED == true
+  void sound_test_loop() {
+    const int motor_on_time = 80;
+    const int time_between_drips = 100;
+    while (true) {
+      change_actuator_state(0, true);
+      change_actuator_state(1, true);
+      delay(motor_on_time);
+      change_actuator_state(0, false);
+      change_actuator_state(1, false);
+      delay(time_between_drips);
+    }
   }
-  
-}
+#endif
 
-bool fake_command() {
-  unsigned long current_time = millis();
-  if (current_time - last_fake_command_time > TIME_BETWEEN_FAKE_COMMANDS) {
-    last_fake_command_time = current_time;
-    return true;
+#if FAKE_COMMANDS_ENABLED == true
+  bool fake_command() {
+    unsigned long current_time = millis();
+    if (current_time - last_fake_command_time > TIME_BETWEEN_FAKE_COMMANDS) {
+      last_fake_command_time = current_time;
+      return true;
+    }
+    return false;
   }
-  return false;
-}
+#endif
 
 void setup() {
   
@@ -329,11 +390,44 @@ void setup() {
   ICR1 = 8000;   // TRIGGER TIMER INTERRUPT EVERY 1mS  
   sei();         // MAKE SURE GLOBAL INTERRUPTS ARE ENABLED
 
-  #if ACTUATORS_CONTROLLED_WITH_MOSFET == true
+  // Initialize actuator controllers
+  #if ACTUATORS_CONTROL_MODE == AC_MOSFET
     pinMode(ACTUATOR1_PIN, OUTPUT);
     pinMode(ACTUATOR2_PIN, OUTPUT);
-  #else
+  #elif ACTUATORS_CONTROL_MODE == AC_MOTOR_SHIELD
     AFMS.begin();
+  #elif ACTUATORS_CONTROL_MODE == AC_TMC2208
+    // Configure the first driver
+    pinMode(TMC_1_EN_PIN, OUTPUT);
+    pinMode(TMC_1_STEP_PIN, OUTPUT);
+    pinMode(TMC_1_DIR_PIN, OUTPUT);
+    digitalWrite(TMC_1_EN_PIN, LOW);  // enable the driver
+    tmc_1.beginSerial(TMC_BAUD_RATE); 
+    tmc_1.begin();  // Initiate pins and registeries
+    tmc_1.pdn_disable(TMC_PDN_DISABLE); // Use UART
+    tmc_1.I_scale_analog(TMC_I_SCALE_ANALOG); // Adjust current from the register
+    tmc_1.rms_current(TMC_RMS_CURRENT); // Set driver current 1A
+    tmc_1.microsteps(TMC_MICROSTEPS);
+    tmc_1.irun(TMC_IRUN);
+    tmc_1.ihold(TMC_IHOLD);
+    tmc_1.GSTAT(TMC_GSTAT); // Clear all status flags
+    tmc_1.VACTUAL(0);
+
+     // Configure the second driver
+    pinMode(TMC_2_EN_PIN, OUTPUT);
+    pinMode(TMC_2_STEP_PIN, OUTPUT);
+    pinMode(TMC_2_DIR_PIN, OUTPUT);
+    digitalWrite(TMC_2_EN_PIN, LOW);  // enable the driver
+    tmc_2.beginSerial(TMC_BAUD_RATE); 
+    tmc_2.begin();  // Initiate pins and registeries
+    tmc_2.pdn_disable(TMC_PDN_DISABLE); // Use UART
+    tmc_2.I_scale_analog(TMC_I_SCALE_ANALOG); // Adjust current from the register
+    tmc_2.rms_current(TMC_RMS_CURRENT); // Set driver current 1A
+    tmc_2.microsteps(TMC_MICROSTEPS);
+    tmc_2.irun(TMC_IRUN);
+    tmc_2.ihold(TMC_IHOLD);
+    tmc_2.GSTAT(TMC_GSTAT); // Clear all status flags
+    tmc_1.VACTUAL(0);
   #endif
 
   pinMode(STATUS_LED_PIN, OUTPUT);
@@ -393,9 +487,6 @@ void loop() {
 
   #if FAKE_COMMANDS_ENABLED == true
     serial_actuator_enabled |= fake_command();
-    // there isn't going to be a host here but we still want to fake it
-    serial_message_responded_to = true;
-    drip_command_type = COMMAND_PULSE_NO_LED;
   #endif
 
   for (int pair_index = 0; pair_index < NUM_PAIRS; pair_index++) {
@@ -423,7 +514,9 @@ void loop() {
     }
 
     if (actuator_enabled[pair_index]) {
-      change_actuator_state(pair_index, HIGH);
+      if (start_actuator) {
+        change_actuator_state(pair_index, HIGH);
+      }
       if (millis() - actuation_start_time[pair_index] > lookup_actuator_enable_time(pair_index)) {
         change_actuator_state(pair_index, LOW);
         actuator_enabled[pair_index] = false;
