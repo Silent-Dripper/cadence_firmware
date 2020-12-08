@@ -33,7 +33,7 @@ For support:
 */
 
 // If set to true, will print debug messages to the serial console
-#define DEBUG_MODE true
+#define DEBUG_MODE false
 
 // If set to True, both drippers will drip given the settings of sound_test_loop.
 // This should NEVER be enabled for production.
@@ -136,7 +136,7 @@ For support:
   #define TMC_I_SCALE_ANALOG 0
   #define TMC_RMS_CURRENT 1000
   #define TMC_MICROSTEPS 0
-  #define TMC_IRUN 15
+  #define TMC_IRUN 9
   #define TMC_IHOLD 5
   #define TMC_GSTAT 0b111
   
@@ -371,15 +371,33 @@ void update_is_person_attached_to_pulse_sensor(int sensor_index) {
 #endif
 
 void setup() {
-  
-  // Initializes Timer1 to throw an interrupt every 1mS.
-  TCCR1A = 0x00; // DISABLE OUTPUTS AND PWM ON DIGITAL PINS 9 & 10
-  TCCR1B = 0x11; // GO INTO 'PHASE AND FREQUENCY CORRECT' MODE, NO PRESCALER
-  TCCR1C = 0x00; // DON'T FORCE COMPARE
-  TIMSK1 = 0x01; // ENABLE OVERFLOW INTERRUPT (TOIE1)
-  ICR1 = 8000;   // TRIGGER TIMER INTERRUPT EVERY 1mS
+
+  cli();
+
+  /*
+   *  Configure TIMER1, responsible for sampling the pulse sensor.
+   */
+
+  // Turn on CTC (Clear timer on compare) mode for TIMER1.
+  // If the timer's count ever gets to the value set in OCR1A. 
+  // It will reset the timer's count after executing the ISR.
+  TCCR1B = (1 << WGM12);
+  // Set the TIMER2 prescaler to 1024.
+  TCCR1B = (1 << CS12) | (1 << CS10);  
+
+  // Set the compare match register for TIMER1 to trigger with a frequency of 1736hz.
+  // Each time this value is reached, the pulse sensor is read.
+  OCR1A = 8;// = (16*10^6) / (1736*1024) - 1 (must be <65536)
+
+  // Enable the function inside of ISR(TIMER1_COMPA_vect).
+  TIMSK1 |= (1 << OCIE1A);
 
   #if ACTUATORS_CONTROL_MODE == AC_TMC2208
+
+    /*
+     *  Configure TIMER2, responsible for driving the stepper motors.
+     */
+  
     // Turn on CTC (Clear timer on compare) mode for TIMER2.
     // If the timer's count ever gets to the value set in OCR2A. 
     // It will reset the timer's count after executing the ISR.
@@ -389,10 +407,12 @@ void setup() {
     // Set the compare match register for TIMER2 to trigger with a frequency of 600.96hz.
     // A rising edge will be sent to the step pin of a TMC every other clock cycle, or in this case every 3mS.
     // If that TMC is enabled.
-    OCR2A = 25;// = (16*10^6) / (600.96 * 1024) - 1 (must be <255 because it's only 1 byte)
+    OCR2A = 25;  // = (16*10^6) / (600.96 * 1024) - 1 (must be <255 because it's only 1 byte)
     // Enable the function inside of ISR(TIMER2_COMPA_vect).
     TIMSK2 |= (1 << OCIE2A); 
   #endif
+
+  sei();
 
   // Initialize actuator controllers
   #if ACTUATORS_CONTROL_MODE == AC_MOSFET
@@ -463,10 +483,10 @@ void setup() {
     // 9 worked for no water
     tmc_1.ihold(TMC_IHOLD);
     tmc_2.ihold(TMC_IHOLD);
-
   #endif
 
   pinMode(STATUS_LED_PIN, OUTPUT);
+  pinMode(13, OUTPUT);
 
   for (int pair_index = 0; pair_index < NUM_PAIRS; pair_index++) {
     analysis_history_index[pair_index] = wrapCounter(NUM_HISTORIC_ANALYSIS);
@@ -588,37 +608,29 @@ void loop() {
 
 // THIS IS THE TIMER1 INTERRUPT SERVICE ROUTINE. 
 // triggered every time Timer 1 overflows, every 1mS
-ISR(TIMER1_OVF_vect) {
-  
+ISR(TIMER1_COMPA_vect) {
   for (int pair_index = 0; pair_index < NUM_PAIRS; pair_index++) {
-
     int pulse_signal = analogRead(pulse_sensor_pins[pair_index]);
-    
     last_sample_time[pair_index] = millis();
-
     int time_delta = last_sample_time[pair_index] - last_beat_time[pair_index];  // monitor the time since the last beat to avoid noise
-    
     if ((pulse_signal > PULSE_START_READING_MIN_THRESHOLD) && (pulse_resetting[pair_index] == false) && (time_delta > MIN_TIME_BETWEEN_BEATS)) {            
       last_beat_time[pair_index] = last_sample_time[pair_index];  // keep track of time for next pulse
       pulse_non_resetting[pair_index] = true;  // set Quantified Self flag when beat is found and BPM gets updated, QS FLAG IS NOT CLEARED INSIDE THIS ISR
       pulse_resetting[pair_index] = true;  // set the pulse flag when we think there is a pulse
     }                       
-
     if (pulse_signal < PULSE_FINISHED_READING_MAX_THRESHOLD && pulse_resetting[pair_index] == true) {  // when the values are going down, it's the time between beats
       pulse_resetting[pair_index] = false;  // reset the pulse flag so we can do it again!
     }
-
     if (sample_entry_counter[pair_index].increment()) {
       analysis_history[pair_index][analysis_history_index[pair_index].value] = pulse_signal;
       analysis_history_index[pair_index].increment();
-    }
-     
-  } 
+    }  
+  }
 }
 
 #if ACTUATORS_CONTROL_MODE == AC_TMC2208
   // THIS IS THE TIMER2 INTERRUPT SERVICE ROUTINE. 
-  ISR(TIMER2_COMPA_vect) {
+  ISR(TIMER2_COMPA_vect) {    
     for (int pair_index = 0; pair_index < NUM_PAIRS; pair_index++) {
       if (tmc_remaining_steps[pair_index] > 0) {
         digitalWrite(tmc_step_pins[pair_index], tmc_step_pin_value[pair_index]);
