@@ -37,7 +37,7 @@ For support:
 
 // If set to True, both drippers will drip given the settings of sound_test_loop.
 // This should NEVER be enabled for production.
-#define SOUND_TEST_MODE_ENABLED false
+#define SOUND_TEST_MODE_ENABLED true
 
 // Configure sending mock commands for testing
 // This should NEVER be enabled for production. 
