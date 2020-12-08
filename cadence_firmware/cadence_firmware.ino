@@ -33,7 +33,7 @@ For support:
 */
 
 // If set to true, will print debug messages to the serial console
-#define DEBUG_MODE false
+#define DEBUG_MODE true
 
 // If set to True, both drippers will drip given the settings of sound_test_loop.
 // This should NEVER be enabled for production.
@@ -41,8 +41,8 @@ For support:
 
 // Configure sending mock commands for testing
 // This should NEVER be enabled for production. 
-#define FAKE_COMMANDS_ENABLED true
-#define TIME_BETWEEN_FAKE_COMMANDS 500
+#define FAKE_COMMANDS_ENABLED false
+#define TIME_BETWEEN_FAKE_COMMANDS 5000
 #if FAKE_COMMANDS_ENABLED == true
   volatile unsigned long last_fake_command_time = 0;
 #endif 
@@ -69,19 +69,22 @@ For support:
 #if ACTUATORS_CONTROL_MODE == AC_MOSFET
   #define ACTUATOR_1_MOTOR_ENABLE_TIME 155
   #define ACTUATOR_2_MOTOR_ENABLE_TIME 153
+  // these will be passed as analogWrite values
   #define ACTUATOR_1_MOTOR_DRIVE_STRENGTH 110
   #define ACTUATOR_2_MOTOR_DRIVE_STRENGTH 80
 #elif ACTUATORS_CONTROL_MODE == AC_MOTOR_SHIELD
   #define ACTUATOR_1_MOTOR_ENABLE_TIME 155
   #define ACTUATOR_2_MOTOR_ENABLE_TIME 155
+  // These will be written to the motor sheild's setSpeed method
   #define ACTUATOR_1_MOTOR_DRIVE_STRENGTH 150
   #define ACTUATOR_2_MOTOR_DRIVE_STRENGTH 150
 #elif ACTUATORS_CONTROL_MODE == AC_TMC2208
-  #define ACTUATOR_1_MOTOR_ENABLE_TIME 200
-  #define ACTUATOR_2_MOTOR_ENABLE_TIME 200
-  // These will be passed as VACTUAL
-  #define ACTUATOR_1_MOTOR_DRIVE_STRENGTH 200
-  #define ACTUATOR_2_MOTOR_DRIVE_STRENGTH 200
+  #define ACTUATOR_1_MOTOR_ENABLE_TIME 210
+  #define ACTUATOR_2_MOTOR_ENABLE_TIME 210
+  // These values are the number of steps the stepper motor will rotate when enabled
+  // There is no check to make sure that all of the steps actually execute.
+  #define ACTUATOR_1_MOTOR_DRIVE_STRENGTH 45
+  #define ACTUATOR_2_MOTOR_DRIVE_STRENGTH 45  
 #else
   #error "Invalid ACTUATORS_CONTROL_MODE"
 #endif
@@ -123,7 +126,7 @@ For support:
   Adafruit_MotorShield AFMS = Adafruit_MotorShield();
   Adafruit_DCMotor *actuator_1 = AFMS.getMotor(1);
   Adafruit_DCMotor *actuator_2 = AFMS.getMotor(2);
-  Adafruit_DCMotor *actuator_controllers[NUM_PAIRS] = {actuator_1, actuator_2};
+  Adafruit_DCMotor *actuator_controllers[NUM_PAIRS] = { actuator_1, actuator_2 };
 #elif ACTUATORS_CONTROL_MODE == AC_TMC2208
 
   #include <TMCStepper.h>
@@ -133,7 +136,7 @@ For support:
   #define TMC_I_SCALE_ANALOG 0
   #define TMC_RMS_CURRENT 1000
   #define TMC_MICROSTEPS 0
-  #define TMC_IRUN 5
+  #define TMC_IRUN 15
   #define TMC_IHOLD 5
   #define TMC_GSTAT 0b111
   
@@ -153,8 +156,16 @@ For support:
 
   TMC2208Stepper tmc_1 = TMC2208Stepper(TMC_1_SW_RX, TMC_1_SW_TX, R_SENSE); // Software serial
   TMC2208Stepper tmc_2 = TMC2208Stepper(TMC_2_SW_RX, TMC_2_SW_TX, R_SENSE); // Software serial
+  
   TMC2208Stepper tmc_controllers[NUM_PAIRS] = { tmc_1, tmc_2 };
+  
   int tmc_enable_pins[NUM_PAIRS] = { TMC_1_EN_PIN, TMC_2_EN_PIN }; 
+  int tmc_step_pins[NUM_PAIRS] { TMC_1_STEP_PIN, TMC_2_STEP_PIN };
+
+  // These two variables are used to control the motors
+  volatile bool tmc_step_pin_value[NUM_PAIRS] = { false, false}; 
+  volatile unsigned long tmc_remaining_steps[NUM_PAIRS] = { 0, 0 };
+  volatile unsigned long steps_per_drip[NUM_PAIRS] = { ACTUATOR_1_MOTOR_DRIVE_STRENGTH, ACTUATOR_2_MOTOR_DRIVE_STRENGTH };
 
 #else
   #error "Invalid ACTUATORS_CONTROL_MODE"
@@ -198,7 +209,7 @@ volatile unsigned long last_sample_time[NUM_PAIRS] = {0, 0}; // used to determin
 #define ANALYSIS_MAX_NEGATIVE_THRESHOLD 50
 #define MIN_DISTANCE_FROM_NEGATIVE_ANALYSIS 3000  // in ms
 
-volatile float analysis_history[NUM_PAIRS][NUM_HISTORIC_ANALYSIS] = { 0 };
+volatile int analysis_history[NUM_PAIRS][NUM_HISTORIC_ANALYSIS] = { 0 };
 wrapCounter analysis_history_index[NUM_PAIRS];
 wrapCounter sample_entry_counter[NUM_PAIRS];
 volatile unsigned long previous_negative_analysis_time[NUM_PAIRS] = { 0 };
@@ -234,7 +245,7 @@ void status_led_blink(int num_blinks, int on_time) {
 /*
  * Get the mean from an array of volatile long unsigned int
  */
-float mean(volatile float * val, int array_length) {
+float mean(volatile int * val, int array_length) {
   long unsigned int total = 0;
   for (int i = 0; i < array_length; i++) {
     total = total + val[i];
@@ -243,7 +254,7 @@ float mean(volatile float * val, int array_length) {
   return avg;
 }
 
-float variance(volatile float * val, int array_length) {
+float variance(volatile int * val, int array_length) {
   float avg = mean(val, array_length);
   long unsigned int total = 0;
   for (int i = 0; i < array_length; i++) {
@@ -256,7 +267,7 @@ float variance(volatile float * val, int array_length) {
 /*
  * Get the standard deviation from an array of volatile long unsigned int
  */
-float standard_deviation(volatile float * val, int array_length) {
+float standard_deviation(volatile int * val, int array_length) {
   float v = variance(val, array_length);
   float std_dev = sqrt(v);
   return std_dev;
@@ -273,13 +284,7 @@ int lookup_actuator_enable_time(int actuator_index) {
 }
 
 void change_actuator_state(int actuator_index, bool enabled) {
-
-  if (actuator_index == 1) {
-    Serial.print(actuator_index);
-    Serial.print(", ");
-    Serial.println(enabled);
-  }
-
+  
   if (actuator_is_motor[actuator_index]) {
     if (enabled) { // we want the motor to spin
       #if ACTUATORS_CONTROL_MODE == AC_MOSFET
@@ -289,7 +294,7 @@ void change_actuator_state(int actuator_index, bool enabled) {
         actuator_controllers[actuator_index]->run(FORWARD);
       #elif ACTUATORS_CONTROL_MODE == AC_TMC2208
         digitalWrite(tmc_enable_pins[actuator_index], LOW);  // enable the driver
-        tmc_controllers[actuator_index].VACTUAL(motor_drive_strengths[actuator_index]);
+        tmc_remaining_steps[actuator_index] += steps_per_drip[actuator_index];
       #endif
     } else { // we want the motor to stop spinning
       #if ACTUATORS_CONTROL_MODE == AC_MOSFET
@@ -297,7 +302,7 @@ void change_actuator_state(int actuator_index, bool enabled) {
       #elif ACTUATORS_CONTROL_MODE == AC_MOTOR_SHIELD
         actuator_controllers[actuator_index]->run(RELEASE);
       #elif ACTUATORS_CONTROL_MODE == AC_TMC2208
-        tmc_controllers[actuator_index].VACTUAL(0);
+        // TODO
         digitalWrite(tmc_enable_pins[actuator_index], HIGH);  // disable the driver
       #endif
     }
@@ -354,21 +359,6 @@ void update_is_person_attached_to_pulse_sensor(int sensor_index) {
   #endif
 }
 
-#if SOUND_TEST_MODE_ENABLED == true
-  void sound_test_loop() {
-    const int motor_on_time = 80;
-    const int time_between_drips = 100;
-    while (true) {
-      change_actuator_state(0, true);
-      change_actuator_state(1, true);
-      delay(motor_on_time);
-      change_actuator_state(0, false);
-      change_actuator_state(1, false);
-      delay(time_between_drips);
-    }
-  }
-#endif
-
 #if FAKE_COMMANDS_ENABLED == true
   bool fake_command() {
     unsigned long current_time = millis();
@@ -387,8 +377,22 @@ void setup() {
   TCCR1B = 0x11; // GO INTO 'PHASE AND FREQUENCY CORRECT' MODE, NO PRESCALER
   TCCR1C = 0x00; // DON'T FORCE COMPARE
   TIMSK1 = 0x01; // ENABLE OVERFLOW INTERRUPT (TOIE1)
-  ICR1 = 8000;   // TRIGGER TIMER INTERRUPT EVERY 1mS  
-  sei();         // MAKE SURE GLOBAL INTERRUPTS ARE ENABLED
+  ICR1 = 8000;   // TRIGGER TIMER INTERRUPT EVERY 1mS
+
+  #if ACTUATORS_CONTROL_MODE == AC_TMC2208
+    // Turn on CTC (Clear timer on compare) mode for TIMER2.
+    // If the timer's count ever gets to the value set in OCR2A. 
+    // It will reset the timer's count after executing the ISR.
+    TCCR2A = (1 << WGM21);
+    // Set the TIMER2 prescaler to 1024.
+    TCCR2B = (1 << CS22) | (1 << CS21) | (1 << CS20);
+    // Set the compare match register for TIMER2 to trigger with a frequency of 600.96hz.
+    // A rising edge will be sent to the step pin of a TMC every other clock cycle, or in this case every 3mS.
+    // If that TMC is enabled.
+    OCR2A = 25;// = (16*10^6) / (600.96 * 1024) - 1 (must be <255 because it's only 1 byte)
+    // Enable the function inside of ISR(TIMER2_COMPA_vect).
+    TIMSK2 |= (1 << OCIE2A); 
+  #endif
 
   // Initialize actuator controllers
   #if ACTUATORS_CONTROL_MODE == AC_MOSFET
@@ -402,32 +406,64 @@ void setup() {
     pinMode(TMC_1_STEP_PIN, OUTPUT);
     pinMode(TMC_1_DIR_PIN, OUTPUT);
     digitalWrite(TMC_1_EN_PIN, LOW);  // enable the driver
-    tmc_1.beginSerial(TMC_BAUD_RATE); 
-    tmc_1.begin();  // Initiate pins and registeries
-    tmc_1.pdn_disable(TMC_PDN_DISABLE); // Use UART
-    tmc_1.I_scale_analog(TMC_I_SCALE_ANALOG); // Adjust current from the register
-    tmc_1.rms_current(TMC_RMS_CURRENT); // Set driver current 1A
-    tmc_1.microsteps(TMC_MICROSTEPS);
-    tmc_1.irun(TMC_IRUN);
-    tmc_1.ihold(TMC_IHOLD);
-    tmc_1.GSTAT(TMC_GSTAT); // Clear all status flags
-    tmc_1.VACTUAL(0);
 
      // Configure the second driver
     pinMode(TMC_2_EN_PIN, OUTPUT);
     pinMode(TMC_2_STEP_PIN, OUTPUT);
     pinMode(TMC_2_DIR_PIN, OUTPUT);
     digitalWrite(TMC_2_EN_PIN, LOW);  // enable the driver
-    tmc_2.beginSerial(TMC_BAUD_RATE); 
+
+    tmc_1.beginSerial(TMC_BAUD_RATE);
+    tmc_2.beginSerial(TMC_BAUD_RATE);
+  
+    tmc_1.begin();  // Initiate pins and registeries
     tmc_2.begin();  // Initiate pins and registeries
+  
+    tmc_1.pdn_disable(TMC_PDN_DISABLE); // Use UART
+    tmc_1.I_scale_analog(TMC_I_SCALE_ANALOG); // Adjust current from the register
+    tmc_1.rms_current(TMC_RMS_CURRENT); // Set driver current 1A
+  
     tmc_2.pdn_disable(TMC_PDN_DISABLE); // Use UART
     tmc_2.I_scale_analog(TMC_I_SCALE_ANALOG); // Adjust current from the register
     tmc_2.rms_current(TMC_RMS_CURRENT); // Set driver current 1A
+  
+    /*
+    * %0001 … %1000:
+    * 128, 64, 32, 16, 8, 4, 2, FULLSTEP
+    * Reduced microstep resolution.
+    * The resolution gives the number of microstep entries per
+    * sine quarter wave.
+    * When choosing a lower microstep resolution, the driver
+    * automatically uses microstep positions which result in a
+    * symmetrical wave.
+    * Number of microsteps per step pulse = 2^MRES
+    * (Selection by pins unless disabled by GCONF.mstep_reg_select)
+    */
+    tmc_1.microsteps(TMC_MICROSTEPS);
     tmc_2.microsteps(TMC_MICROSTEPS);
+  
+    /*
+    * IRUN (Reset default=31)
+    * Motor run current (0=1/32 … 31=32/32)
+    * Hint: Choose sense resistors in a way, that normal
+    * IRUN is 16 to 31 for best microstep performance.
+    */
+  
+    // 26 worked for no water
+    tmc_1.irun(TMC_IRUN);
     tmc_2.irun(TMC_IRUN);
+  
+    /*
+    * IHOLD (Reset default: OTP)
+    * Standstill current (0=1/32 … 31=32/32)
+    * In combination with StealthChop mode, setting
+    * IHOLD=0 allows to choose freewheeling or coil
+    * short circuit (passive braking) for motor stand still.
+    */
+    // 9 worked for no water
+    tmc_1.ihold(TMC_IHOLD);
     tmc_2.ihold(TMC_IHOLD);
-    tmc_2.GSTAT(TMC_GSTAT); // Clear all status flags
-    tmc_1.VACTUAL(0);
+
   #endif
 
   pinMode(STATUS_LED_PIN, OUTPUT);
@@ -444,12 +480,28 @@ void setup() {
 
   Serial.begin(115200);
 
+  #if DEBUG_MODE == true
+    Serial.print("Current_Standard_Deviation");
+    Serial.print(",");
+    Serial.print("Analysis_Min_Positive_Threshold");
+    Serial.print(",");
+    Serial.print("Pulse_Sensor_Enabled");
+    Serial.print(",");
+    Serial.print("Latest_Raw_Value");
+    Serial.print(",");
+    Serial.print("Current_Mean");
+    Serial.println();
+  #endif
+
 }
 
 void loop() {
   
   #if SOUND_TEST_MODE_ENABLED == true
-    sound_test_loop();
+    while (true) {
+      tmc_remaining_steps[0] = 45;
+      delay(500);
+    }
   #endif
 
   bool serial_actuator_enabled = false;
@@ -529,25 +581,20 @@ void loop() {
         }
       }
     }
-    
+
   }
 
 }
 
-// THIS IS THE TIMER 1 INTERRUPT SERVICE ROUTINE. 
+// THIS IS THE TIMER1 INTERRUPT SERVICE ROUTINE. 
 // triggered every time Timer 1 overflows, every 1mS
 ISR(TIMER1_OVF_vect) {
   
   for (int pair_index = 0; pair_index < NUM_PAIRS; pair_index++) {
 
-    // Get a quick spot reading by taking multiple samples and passing along the average value
-    float pulse_signal = 0;
-    for (int i = 0; i < NUM_SPOT_SAMPLES; i++) {
-      pulse_signal = pulse_signal + analogRead(pulse_sensor_pins[pair_index]);
-    }
-    pulse_signal = pulse_signal / NUM_SPOT_SAMPLES;
+    int pulse_signal = analogRead(pulse_sensor_pins[pair_index]);
     
-    last_sample_time[pair_index]++;  // keep track of the time with this variable (ISR triggered every 1mS
+    last_sample_time[pair_index] = millis();
 
     int time_delta = last_sample_time[pair_index] - last_beat_time[pair_index];  // monitor the time since the last beat to avoid noise
     
@@ -568,3 +615,21 @@ ISR(TIMER1_OVF_vect) {
      
   } 
 }
+
+#if ACTUATORS_CONTROL_MODE == AC_TMC2208
+  // THIS IS THE TIMER2 INTERRUPT SERVICE ROUTINE. 
+  ISR(TIMER2_COMPA_vect) {
+    for (int pair_index = 0; pair_index < NUM_PAIRS; pair_index++) {
+      if (tmc_remaining_steps[pair_index] > 0) {
+        digitalWrite(tmc_step_pins[pair_index], tmc_step_pin_value[pair_index]);
+        if (tmc_step_pin_value[pair_index] == true) {
+          tmc_remaining_steps[pair_index] = tmc_remaining_steps[pair_index] - 1;
+        }
+        tmc_step_pin_value[pair_index] = !tmc_step_pin_value[pair_index];    
+      } else if (tmc_remaining_steps[pair_index] == 0)  {
+        digitalWrite(tmc_step_pins[pair_index], false);
+        tmc_step_pin_value[pair_index] = false;
+      }
+    }
+  }
+#endif
