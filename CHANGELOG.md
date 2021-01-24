@@ -1,5 +1,9 @@
 # Changelog
 
+## 6.0.0 - (2021-2-xx)
+
+* Added support to control stepper motor pumps using the TMC2208
+
 ## 5.2.0 - (2020-11-7)
 
 * Set different enable times/pwm values depending on if the firmware is using the Adafruit Motor Sheild v2 or the MOSFETs on the Cadence PCB.
