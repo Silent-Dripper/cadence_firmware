@@ -37,7 +37,7 @@ For support:
 
 // If set to True, both drippers will drip given the settings of sound_test_loop.
 // This should NEVER be enabled for production.
-#define SOUND_TEST_MODE_ENABLED false
+#define SOUND_TEST_MODE_ENABLED true
 
 // Configure sending mock commands for testing
 // This should NEVER be enabled for production. 
@@ -79,13 +79,11 @@ For support:
   #define ACTUATOR_1_MOTOR_DRIVE_STRENGTH 150
   #define ACTUATOR_2_MOTOR_DRIVE_STRENGTH 150
 #elif ACTUATORS_CONTROL_MODE == AC_TMC2208
-  #define ACTUATOR_1_MOTOR_ENABLE_TIME 210
-  #define ACTUATOR_2_MOTOR_ENABLE_TIME 210
-  // These values are the number of steps the stepper motor will rotate when enabled
-  // There is no check to make sure that all of the steps actually execute.
-  // TODO - these constants are poorly named
-  #define ACTUATOR_1_MOTOR_DRIVE_STRENGTH 890 // TODO - this should read from a pot to trim the value.
-  #define ACTUATOR_2_MOTOR_DRIVE_STRENGTH ACTUATOR_1_MOTOR_DRIVE_STRENGTH  
+  // TODO - this could lead to some steps being missed. Figure out a way to scale this so we don't cut off steps
+  #define ACTUATOR_1_MOTOR_ENABLE_TIME 400
+  #define ACTUATOR_2_MOTOR_ENABLE_TIME 400
+  #define STEPPER_PUMP_MIN_STEPS_PER_DRIP 200
+  #define STEPPER_PUMP_MAX_STEPS_PER_DRIP 1500
 #else
   #error "Invalid ACTUATORS_CONTROL_MODE"
 #endif
@@ -113,6 +111,11 @@ For support:
 // Pins of all inputs and outputs
 #define PULSE1_PIN A0
 #define PULSE2_PIN A1
+
+#if ACTUATORS_CONTROL_MODE == AC_TMC2208
+  #define ACTUATOR_1_DRIP_SIZE_POT_PIN A2
+  #define ACTUATOR_2_DRIP_SIZE_POT_PIN A3
+#endif
 
 #define NUM_PAIRS 2
 
@@ -151,11 +154,12 @@ For support:
   #define R_SENSE 0.11f  // SilentStepStick series use 0.11
   TMC2208Stepper tmc_controllers[NUM_PAIRS] = { TMC2208Stepper(TMC_1_SW_RX, TMC_1_SW_TX, R_SENSE), TMC2208Stepper(TMC_2_SW_RX, TMC_2_SW_TX, R_SENSE) };
   int tmc_enable_pins[NUM_PAIRS] = { TMC_1_EN_PIN, TMC_2_EN_PIN }; 
-  int tmc_step_pins[NUM_PAIRS] { TMC_1_STEP_PIN, TMC_2_STEP_PIN };
+  int tmc_step_pins[NUM_PAIRS] = { TMC_1_STEP_PIN, TMC_2_STEP_PIN };
+  int drip_size_pot_pins[NUM_PAIRS] = { ACTUATOR_1_DRIP_SIZE_POT_PIN, ACTUATOR_2_DRIP_SIZE_POT_PIN };
   // These two variables are used to control the motors
   volatile bool tmc_step_pin_value[NUM_PAIRS] = { false, false}; 
   volatile unsigned long tmc_remaining_steps[NUM_PAIRS] = { 0, 0 };
-  volatile unsigned long steps_per_drip[NUM_PAIRS] = { ACTUATOR_1_MOTOR_DRIVE_STRENGTH, ACTUATOR_2_MOTOR_DRIVE_STRENGTH };
+  
 #else
   #error "Invalid ACTUATORS_CONTROL_MODE"
 #endif
@@ -210,7 +214,10 @@ int pulse_sensor_pins[NUM_PAIRS] = {PULSE1_PIN, PULSE2_PIN};
 
 bool actuator_is_motor[NUM_PAIRS] = {ACTUATOR_1_MOTOR, ACTUATOR_2_MOTOR};
 int motor_enable_times[NUM_PAIRS] = {ACTUATOR_1_MOTOR_ENABLE_TIME, ACTUATOR_2_MOTOR_ENABLE_TIME};
-int motor_drive_strengths[NUM_PAIRS] = {ACTUATOR_1_MOTOR_DRIVE_STRENGTH, ACTUATOR_2_MOTOR_DRIVE_STRENGTH};
+
+#if ACTUATORS_CONTROL_MODE == AC_MOSFET || ACTUATORS_CONTROL_MODE == AC_MOTOR_SHIELD
+  int motor_drive_strengths[NUM_PAIRS] = {ACTUATOR_1_MOTOR_DRIVE_STRENGTH, ACTUATOR_2_MOTOR_DRIVE_STRENGTH};
+#endif
 
 bool pulse_sensor_enabled[NUM_PAIRS] = { false , false };
 bool actuator_enabled[NUM_PAIRS] = {false, false};
@@ -281,7 +288,7 @@ void change_actuator_state(int actuator_index, bool enabled) {
         actuator_controllers[actuator_index]->run(FORWARD);
       #elif ACTUATORS_CONTROL_MODE == AC_TMC2208
         digitalWrite(tmc_enable_pins[actuator_index], LOW);  // enable the driver
-        tmc_remaining_steps[actuator_index] += steps_per_drip[actuator_index];
+        tmc_remaining_steps[actuator_index] += map(analogRead(drip_size_pot_pins[actuator_index]), 0, 1023, STEPPER_PUMP_MIN_STEPS_PER_DRIP, STEPPER_PUMP_MAX_STEPS_PER_DRIP);
       #endif
     } else { // we want the motor to stop spinning
       #if ACTUATORS_CONTROL_MODE == AC_MOSFET
@@ -494,9 +501,9 @@ void loop() {
   #if SOUND_TEST_MODE_ENABLED == true
     while (true) {
       change_actuator_state(0, true);
-      delay(250);
+      delay(ACTUATOR_1_MOTOR_ENABLE_TIME);
       change_actuator_state(0, false);
-      delay(250);
+      delay(ACTUATOR_1_MOTOR_ENABLE_TIME);
     }
   #endif
 
