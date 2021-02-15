@@ -32,20 +32,8 @@ For support:
   Debug and test mode config
 */
 
-// If set to true, will print debug messages to the serial console
-#define DEBUG_MODE false
-
-// If set to True, both drippers will drip given the settings of sound_test_loop.
-// This should NEVER be enabled for production.
-#define SOUND_TEST_MODE_ENABLED true
-
-// Configure sending mock commands for testing
-// This should NEVER be enabled for production. 
-#define FAKE_COMMANDS_ENABLED false
-#define TIME_BETWEEN_FAKE_COMMANDS 5000
-#if FAKE_COMMANDS_ENABLED == true
-  volatile unsigned long last_fake_command_time = 0;
-#endif 
+// If set to true, will print debug messages to the serial console.
+#define DEBUG_MODE true
 
 /*
   High level configuration constants
@@ -81,7 +69,7 @@ For support:
 #elif ACTUATORS_CONTROL_MODE == AC_TMC2208
   // TODO - this could lead to some steps being missed. Figure out a way to scale this so we don't cut off steps
   #define ACTUATOR_1_MOTOR_ENABLE_TIME 400
-  #define ACTUATOR_2_MOTOR_ENABLE_TIME 400
+  #define ACTUATOR_2_MOTOR_ENABLE_TIME ACTUATOR_1_MOTOR_ENABLE_TIME
   #define STEPPER_PUMP_MIN_STEPS_PER_DRIP 200
   #define STEPPER_PUMP_MAX_STEPS_PER_DRIP 1500
 #else
@@ -112,13 +100,9 @@ For support:
 #define PULSE1_PIN A0
 #define PULSE2_PIN A1
 
-#if ACTUATORS_CONTROL_MODE == AC_TMC2208
-  #define ACTUATOR_1_DRIP_SIZE_POT_PIN A2
-  #define ACTUATOR_2_DRIP_SIZE_POT_PIN A3
-#endif
-
 #define NUM_PAIRS 2
 
+// TODO would like to seperate the concerns to a board level config. Using the cadence driver vs the silent dripper board
 #if ACTUATORS_CONTROL_MODE == AC_MOSFET
   #define ACTUATOR1_PIN 11 // also soldered to 2
   #define ACTUATOR2_PIN 3
@@ -132,8 +116,23 @@ For support:
   Adafruit_DCMotor *actuator_2 = AFMS.getMotor(2);
   Adafruit_DCMotor *actuator_controllers[NUM_PAIRS] = { actuator_1, actuator_2 };
 #elif ACTUATORS_CONTROL_MODE == AC_TMC2208
+
+  #define ACTUATOR_1_DRIP_SIZE_POT_PIN A2
+  #define ACTUATOR_2_DRIP_SIZE_POT_PIN A3
+  #define CALIBRATION_MODE_SWITCH_PIN 12
+
+  // TODO - more sniff, this has nothing to do with the drivers being used but the hardware the board is installed on.
+  #define LED_DATA_PIN A5 
+  #define LED_CLOCK_PIN A4
+
+  #include <FastLED.h>
+  #define NUM_LEDS 3
+  CRGB leds[NUM_LEDS];
+
+  #define NUM_TMC_CONFIG_ATTEMPTS 1000
+
   #include <TMCStepper.h>
-  #define TMC_BAUD_RATE 115200
+  #define TMC_BAUD_RATE 4800
   #define TMC_PDN_DISABLE true   // Use UART 
   #define TMC_I_SCALE_ANALOG 0  // Adjust current from the register
   #define TMC_RMS_CURRENT 1000  // Set driver current 1A
@@ -141,6 +140,7 @@ For support:
   #define TMC_IRUN 9
   #define TMC_IHOLD 5
   #define TMC_GSTAT 0b111 
+  
   #define TMC_1_SW_TX 2  // TMC2208 SoftwareSerial transmit pin
   #define TMC_1_SW_RX 3  // TMC2208 SoftwareSerial receive pin
   #define TMC_1_STEP_PIN 4  // Step
@@ -151,15 +151,17 @@ For support:
   #define TMC_2_STEP_PIN 9  // Step
   #define TMC_2_DIR_PIN 10  // Direction
   #define TMC_2_EN_PIN 11  // Enable
+  
   #define R_SENSE 0.11f  // SilentStepStick series use 0.11
-  TMC2208Stepper tmc_controllers[NUM_PAIRS] = { TMC2208Stepper(TMC_1_SW_RX, TMC_1_SW_TX, R_SENSE), TMC2208Stepper(TMC_2_SW_RX, TMC_2_SW_TX, R_SENSE) };
+  
+  TMC2208Stepper tmc_controllers[NUM_PAIRS] = { TMC2208Stepper(TMC_1_SW_RX, TMC_1_SW_TX, R_SENSE), TMC2208Stepper(TMC_2_SW_RX, TMC_2_SW_TX, R_SENSE)  };
+  
   int tmc_enable_pins[NUM_PAIRS] = { TMC_1_EN_PIN, TMC_2_EN_PIN }; 
   int tmc_step_pins[NUM_PAIRS] = { TMC_1_STEP_PIN, TMC_2_STEP_PIN };
   int drip_size_pot_pins[NUM_PAIRS] = { ACTUATOR_1_DRIP_SIZE_POT_PIN, ACTUATOR_2_DRIP_SIZE_POT_PIN };
   // These two variables are used to control the motors
   volatile bool tmc_step_pin_value[NUM_PAIRS] = { false, false}; 
   volatile unsigned long tmc_remaining_steps[NUM_PAIRS] = { 0, 0 };
-  
 #else
   #error "Invalid ACTUATORS_CONTROL_MODE"
 #endif
@@ -352,20 +354,143 @@ void update_is_person_attached_to_pulse_sensor(int sensor_index) {
   #endif
 }
 
-#if FAKE_COMMANDS_ENABLED == true
-  bool fake_command() {
-    unsigned long current_time = millis();
-    if (current_time - last_fake_command_time > TIME_BETWEEN_FAKE_COMMANDS) {
-      last_fake_command_time = current_time;
-      return true;
-    }
-    return false;
-  }
-#endif
-
 void setup() {
 
-  cli();
+  // Initialize actuator controllers
+  #if ACTUATORS_CONTROL_MODE == AC_MOSFET
+    pinMode(ACTUATOR1_PIN, OUTPUT);
+    pinMode(ACTUATOR2_PIN, OUTPUT);
+  #elif ACTUATORS_CONTROL_MODE == AC_MOTOR_SHIELD
+    AFMS.begin();
+  #elif ACTUATORS_CONTROL_MODE == AC_TMC2208
+    // Configure the first driver
+    pinMode(TMC_1_EN_PIN, OUTPUT);
+    pinMode(TMC_1_STEP_PIN, OUTPUT);
+    pinMode(TMC_1_DIR_PIN, OUTPUT);
+    digitalWrite(TMC_1_EN_PIN, LOW);  // enable the driver
+
+     // Configure the second driver
+    pinMode(TMC_2_EN_PIN, OUTPUT);
+    pinMode(TMC_2_STEP_PIN, OUTPUT);
+    pinMode(TMC_2_DIR_PIN, OUTPUT);
+    digitalWrite(TMC_2_EN_PIN, LOW);  // enable the driver
+
+    Serial.begin(9600);
+
+    FastLED.addLeds<APA102, LED_DATA_PIN, LED_CLOCK_PIN, BGR>(leds, NUM_LEDS);
+
+    for (int i = 0; i < NUM_PAIRS; i++) {
+      leds[i] = CRGB::Yellow;
+      FastLED.show();      
+    }
+
+    delay(2000);
+  
+    for (int i = 0; i < NUM_PAIRS; i++) {
+      for (int j = 0; j < NUM_TMC_CONFIG_ATTEMPTS; j++) {
+
+        tmc_controllers[i].beginSerial(TMC_BAUD_RATE);
+        tmc_controllers[i].begin();  // Initiate pins and registeries
+        
+        tmc_controllers[i].pdn_disable(TMC_PDN_DISABLE);
+        tmc_controllers[i].I_scale_analog(TMC_I_SCALE_ANALOG);
+        tmc_controllers[i].rms_current(TMC_RMS_CURRENT);
+  
+        /*
+        * %0001 … %1000:
+        * 128, 64, 32, 16, 8, 4, 2, FULLSTEP
+        * Reduced microstep resolution.
+        * The resolution gives the number of microstep entries per
+        * sine quarter wave.
+        * When choosing a lower microstep resolution, the driver
+        * automatically uses microstep positions which result in a
+        * symmetrical wave.
+        * Number of microsteps per step pulse = 2^MRES
+        * (Selection by pins unless disabled by GCONF.mstep_reg_select)
+        */
+        tmc_controllers[i].microsteps(TMC_MICROSTEPS);
+  
+        /*
+        * IRUN (Reset default=31)
+        * Motor run current (0=1/32 … 31=32/32)
+        * Hint: Choose sense resistors in a way, that normal
+        * IRUN is 16 to 31 for best microstep performance.
+        */
+        tmc_controllers[i].irun(TMC_IRUN);
+  
+         /*
+        * IHOLD (Reset default: OTP)
+        * Standstill current (0=1/32 … 31=32/32)
+        * In combination with StealthChop mode, setting
+        * IHOLD=0 allows to choose freewheeling or coil
+        * short circuit (passive braking) for motor stand still.
+        */
+        tmc_controllers[i].ihold(TMC_IHOLD);
+
+        // Marlin, the 3D printer firmware, and probably the most widely used implementation of
+        // these TMC drivers has a 200ms delay right after the final config register is written.
+        // It's not documented as to why that is there, but I'm doing it here as well.
+        delay(200);
+
+        // This returns 0 if there are no problems with the communication between the host and the TMC.
+        int connection = tmc_controllers[i].test_connection();
+
+        if ((connection == 0) && (tmc_controllers[i].CRCerror == false)) {
+          #if DEBUG_MODE == true
+            Serial.print("Established a successful connection over UART with TMC2208 #");
+            Serial.print(i);
+            Serial.print(" after ");
+            Serial.print(j);
+            Serial.print(" attempts.");
+            Serial.println();
+          #endif
+          leds[i] = CRGB::Green;
+          FastLED.show();
+          break;
+        } else {
+          #if DEBUG_MODE == true
+            Serial.print("UART connection with TMC2208 #");
+            Serial.print(i);
+            Serial.print(" failed. Failure count: ");
+            Serial.print(j);
+            Serial.println();
+          #endif
+          leds[i] = CRGB::Red;
+          FastLED.show();
+        }
+      }
+    }
+  #endif
+
+  pinMode(CALIBRATION_MODE_SWITCH_PIN, INPUT_PULLUP);
+
+  // TODO, this isn't valid
+  pinMode(STATUS_LED_PIN, OUTPUT);
+
+  for (int pair_index = 0; pair_index < NUM_PAIRS; pair_index++) {
+    analysis_history_index[pair_index] = wrapCounter(NUM_HISTORIC_ANALYSIS);
+    sample_entry_counter[pair_index] = wrapCounter(VALUE_INTO_ANALYSIS_EVERY_N_SAMPLES);
+
+    // fill this buffer with sensical values
+    for (int sample_index = 0; sample_index < NUM_HISTORIC_ANALYSIS; sample_index++) {
+      analysis_history[pair_index][sample_index] = analogRead(pulse_sensor_pins[pair_index]);
+    }
+  }
+
+  #if DEBUG_MODE == true
+    Serial.print("Current_Standard_Deviation");
+    Serial.print(",");
+    Serial.print("Analysis_Min_Positive_Threshold");
+    Serial.print(",");
+    Serial.print("Pulse_Sensor_Enabled");
+    Serial.print(",");
+    Serial.print("Latest_Raw_Value");
+    Serial.print(",");
+    Serial.print("Current_Mean");
+    Serial.println();
+  #endif
+
+  // Configure timers LAST. After this point, anything using SoftwareSerial will not work!
 
   /*
    *  Configure TIMER1, responsible for sampling the pulse sensor.
@@ -404,108 +529,33 @@ void setup() {
     // Enable the function inside of ISR(TIMER2_COMPA_vect).
     TIMSK2 |= (1 << OCIE2A); 
   #endif
-
-  sei();
-
-  // Initialize actuator controllers
-  #if ACTUATORS_CONTROL_MODE == AC_MOSFET
-    pinMode(ACTUATOR1_PIN, OUTPUT);
-    pinMode(ACTUATOR2_PIN, OUTPUT);
-  #elif ACTUATORS_CONTROL_MODE == AC_MOTOR_SHIELD
-    AFMS.begin();
-  #elif ACTUATORS_CONTROL_MODE == AC_TMC2208
-    // Configure the first driver
-    pinMode(TMC_1_EN_PIN, OUTPUT);
-    pinMode(TMC_1_STEP_PIN, OUTPUT);
-    pinMode(TMC_1_DIR_PIN, OUTPUT);
-    digitalWrite(TMC_1_EN_PIN, LOW);  // enable the driver
-
-     // Configure the second driver
-    pinMode(TMC_2_EN_PIN, OUTPUT);
-    pinMode(TMC_2_STEP_PIN, OUTPUT);
-    pinMode(TMC_2_DIR_PIN, OUTPUT);
-    digitalWrite(TMC_2_EN_PIN, LOW);  // enable the driver
-
-    for (int i = 0; i < NUM_PAIRS; i++) {
-      
-      tmc_controllers[i].beginSerial(TMC_BAUD_RATE);
-      tmc_controllers[i].begin();  // Initiate pins and registeries
-      tmc_controllers[i].pdn_disable(TMC_PDN_DISABLE);
-      tmc_controllers[i].I_scale_analog(TMC_I_SCALE_ANALOG);
-      tmc_controllers[i].rms_current(TMC_RMS_CURRENT);
-
-      /*
-      * %0001 … %1000:
-      * 128, 64, 32, 16, 8, 4, 2, FULLSTEP
-      * Reduced microstep resolution.
-      * The resolution gives the number of microstep entries per
-      * sine quarter wave.
-      * When choosing a lower microstep resolution, the driver
-      * automatically uses microstep positions which result in a
-      * symmetrical wave.
-      * Number of microsteps per step pulse = 2^MRES
-      * (Selection by pins unless disabled by GCONF.mstep_reg_select)
-      */
-      tmc_controllers[i].microsteps(TMC_MICROSTEPS);
-
-      /*
-      * IRUN (Reset default=31)
-      * Motor run current (0=1/32 … 31=32/32)
-      * Hint: Choose sense resistors in a way, that normal
-      * IRUN is 16 to 31 for best microstep performance.
-      */
-      tmc_controllers[i].irun(TMC_IRUN);
-
-       /*
-      * IHOLD (Reset default: OTP)
-      * Standstill current (0=1/32 … 31=32/32)
-      * In combination with StealthChop mode, setting
-      * IHOLD=0 allows to choose freewheeling or coil
-      * short circuit (passive braking) for motor stand still.
-      */
-      tmc_controllers[i].ihold(TMC_IHOLD); 
-    }
-  #endif
-
-  pinMode(STATUS_LED_PIN, OUTPUT);
-
-  for (int pair_index = 0; pair_index < NUM_PAIRS; pair_index++) {
-    analysis_history_index[pair_index] = wrapCounter(NUM_HISTORIC_ANALYSIS);
-    sample_entry_counter[pair_index] = wrapCounter(VALUE_INTO_ANALYSIS_EVERY_N_SAMPLES);
-
-    // fill this buffer with sensical values
-    for (int sample_index = 0; sample_index < NUM_HISTORIC_ANALYSIS; sample_index++) {
-      analysis_history[pair_index][sample_index] = analogRead(pulse_sensor_pins[pair_index]);
-    }
-  }
-
-  Serial.begin(115200);
-
-  #if DEBUG_MODE == true
-    Serial.print("Current_Standard_Deviation");
-    Serial.print(",");
-    Serial.print("Analysis_Min_Positive_Threshold");
-    Serial.print(",");
-    Serial.print("Pulse_Sensor_Enabled");
-    Serial.print(",");
-    Serial.print("Latest_Raw_Value");
-    Serial.print(",");
-    Serial.print("Current_Mean");
-    Serial.println();
-  #endif
+  
 
 }
 
 void loop() {
-  
-  #if SOUND_TEST_MODE_ENABLED == true
-    while (true) {
-      change_actuator_state(0, true);
-      delay(ACTUATOR_1_MOTOR_ENABLE_TIME);
-      change_actuator_state(0, false);
-      delay(ACTUATOR_1_MOTOR_ENABLE_TIME);
-    }
-  #endif
+
+  while (digitalRead(CALIBRATION_MODE_SWITCH_PIN) == LOW) {
+    
+    leds[0] = CRGB::Red;
+    FastLED.show();
+    change_actuator_state(0, true);
+    delay(ACTUATOR_1_MOTOR_ENABLE_TIME);
+    change_actuator_state(0, false);
+    leds[0] = CRGB::Black;
+    FastLED.show();
+
+    delay(500);
+
+    leds[1] = CRGB::Red;
+    FastLED.show();
+    change_actuator_state(1, true);
+    delay(ACTUATOR_2_MOTOR_ENABLE_TIME);
+    change_actuator_state(1, false);
+    leds[1] = CRGB::Black;
+    FastLED.show();
+    
+  }
 
   bool serial_actuator_enabled = false;
 
@@ -517,7 +567,7 @@ void loop() {
         Serial.write(COMMAND_HEARTBEAT);  // echo back
         break;
       case COMMAND_SERVICE_STARTED:
-        status_led_blink(3, 300);  // three short blinks when we expect to start processing commands.
+        status_led_blink(3, 300);  // three heshort blinks when we expect to start processing commands.
         Serial.write(COMMAND_SERVICE_STARTED);  // echo back
         break;
       case COMMAND_SERVICE_CRASHED:
@@ -539,10 +589,6 @@ void loop() {
         break;
     }
   }
-
-  #if FAKE_COMMANDS_ENABLED == true
-    serial_actuator_enabled |= fake_command();
-  #endif
 
   for (int pair_index = 0; pair_index < NUM_PAIRS; pair_index++) {
 
@@ -570,11 +616,14 @@ void loop() {
 
     if (actuator_enabled[pair_index]) {
       if (start_actuator) {
-        change_actuator_state(pair_index, HIGH);
+        //fastled code goes above here
+        change_actuator_state(pair_index, HIGH); // enables the actuator
       }
       if (millis() - actuation_start_time[pair_index] > lookup_actuator_enable_time(pair_index)) {
-        change_actuator_state(pair_index, LOW);
+        change_actuator_state(pair_index, LOW); // disables the actuator
         actuator_enabled[pair_index] = false;
+        //fastled code goes below here
+        
         if (actuator_controlled_via_serial_port[pair_index] == true) {
           digitalWrite(STATUS_LED_PIN, LOW);
           if (serial_message_needs_responding_to) {

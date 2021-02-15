@@ -1,11 +1,11 @@
 #include <TMCStepper.h>
 
-#define TMC_BAUD_RATE 115200
+#define TMC_BAUD_RATE 9800
 #define TMC_PDN_DISABLE true
 #define TMC_I_SCALE_ANALOG 0
 #define TMC_RMS_CURRENT 1000
-#define TMC_MICROSTEPS 0
-#define TMC_IRUN 15
+#define TMC_MICROSTEPS 16
+#define TMC_IRUN 9
 #define TMC_IHOLD 5
 #define TMC_GSTAT 0b111
 
@@ -51,16 +51,42 @@ ISR(TIMER2_COMPA_vect) {
 
 void setup() {
 
-  // Turn on CTC (Clear timer on compare) mode.
-  // If the timer's value ever gets to the value set in OCR2A. 
+  /*
+   *  Configure TIMER1, responsible for sampling the pulse sensor.
+   */
+  /*
+  // Turn on CTC (Clear timer on compare) mode for TIMER1.
+  // If the timer's count ever gets to the value set in OCR1A. 
+  // It will reset the timer's count after executing the ISR.
+  TCCR1B = (1 << WGM12);
+  // Set the TIMER2 prescaler to 1024.
+  TCCR1B = (1 << CS12) | (1 << CS10);  
+
+  // Set the compare match register for TIMER1 to trigger with a frequency of 1736hz.
+  // Each time this value is reached, the pulse sensor is read.
+  OCR1A = 8;// = (16*10^6) / (1736*1024) - 1 (must be <65536)
+
+  // Enable the function inside of ISR(TIMER1_COMPA_vect).
+  TIMSK1 |= (1 << OCIE1A);
+  */
+  /*
+   *  Configure TIMER2, responsible for driving the stepper motors.
+   */
+
+  /*
+  // Turn on CTC (Clear timer on compare) mode for TIMER2.
+  // If the timer's count ever gets to the value set in OCR2A. 
   // It will reset the timer's count after executing the ISR.
   TCCR2A = (1 << WGM21);
-  // The timer2 prescaler to 128.
-  TCCR2B = (1 << CS22) | (1 << CS21) | (1 << CS20);
-  // Set the compare match register for timer2 to trigger with a frequency of 1000hz.
-  OCR2A = 25;// = (16*10^6) / (1000 * 1024) - 1 (must be <255 because it's only 1 byte)
+  // Set the TIMER2 prescaler to 128.
+  TCCR2B = (1 << CS22) | (0 << CS21) | (1 << CS20);
+  // Set the compare match register for TIMER2 to trigger with a frequency of ~9615.4hz.
+  // A rising edge will be sent to the step pin of a TMC every other clock cycle, or in this case every 3mS.
+  // If that TMC is enabled.
+  OCR2A = 12;  // = (16*10^6) / (3000 * 128) - 1 (must be <255 because it's only 1 byte)
   // Enable the function inside of ISR(TIMER2_COMPA_vect).
-  TIMSK2 |= (1 << OCIE2A); 
+  TIMSK2 |= (1 << OCIE2A);
+  */
 
   pinMode(13, OUTPUT);
 
@@ -102,6 +128,9 @@ void setup() {
   * Number of microsteps per step pulse = 2^MRES
   * (Selection by pins unless disabled by GCONF.mstep_reg_select)
   */
+  tmc_1.mstep_reg_select(true);
+  tmc_2.mstep_reg_select(true);
+  
   tmc_1.microsteps(TMC_MICROSTEPS);
   tmc_2.microsteps(TMC_MICROSTEPS);
 
@@ -127,27 +156,20 @@ void setup() {
   tmc_1.ihold(TMC_IHOLD);
   tmc_2.ihold(TMC_IHOLD);
 
+  tmc_1.GSTAT(TMC_GSTAT);
+
+  delay(200);
+
   Serial.println("Starting...");  
 }
 
 void loop() {
-  /*
-  digitalWrite(TMC_1_EN_PIN, LOW);
-  digitalWrite(TMC_2_EN_PIN, LOW);
-  digitalWrite(13, HIGH);
-  for (int i = 0; i < NUM_STEPS; i++) {
-    digitalWrite(TMC_1_STEP_PIN, HIGH);
-    digitalWrite(TMC_2_STEP_PIN, HIGH);
-    delayMicroseconds(1500);
-    digitalWrite(TMC_1_STEP_PIN, LOW);
-    digitalWrite(TMC_2_STEP_PIN, LOW);
-    delayMicroseconds(1500);
-  }
-  digitalWrite(13, LOW);
-  */
 
-  tmc_remaining_steps = 45;
-  
-  delay(500);
+  long stat = tmc_1.DRV_STATUS();
+  bool crc_error = tmc_1.CRCerror;
+
+  if (!crc_error) {
+    Serial.println(stat, BIN);
+  }
   
 }
