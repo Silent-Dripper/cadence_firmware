@@ -33,7 +33,7 @@ For support:
 */
 
 // If set to true, will print debug messages to the serial console.
-#define DEBUG_MODE true
+#define DEBUG_MODE false
 
 /*
   High level configuration constants
@@ -129,7 +129,9 @@ For support:
   #define NUM_LEDS 3
   CRGB leds[NUM_LEDS];
 
-  #define NUM_TMC_CONFIG_ATTEMPTS 1000
+  #define LED_UI_DELAY_MS 2000
+
+  #define NUM_TMC_CONFIG_ATTEMPTS 10
 
   #include <TMCStepper.h>
   #define TMC_BAUD_RATE 4800
@@ -384,11 +386,18 @@ void setup() {
       FastLED.show();      
     }
 
-    delay(2000);
+    delay(LED_UI_DELAY_MS);
+
+    bool sucessful_config;
+    int num_config_attempts;
   
     for (int i = 0; i < NUM_PAIRS; i++) {
-      for (int j = 0; j < NUM_TMC_CONFIG_ATTEMPTS; j++) {
 
+      sucessful_config = false;
+      num_config_attempts = 0;
+
+      while (sucessful_config == false && num_config_attempts < NUM_TMC_CONFIG_ATTEMPTS) {
+        
         tmc_controllers[i].beginSerial(TMC_BAUD_RATE);
         tmc_controllers[i].begin();  // Initiate pins and registeries
         
@@ -432,34 +441,48 @@ void setup() {
         // It's not documented as to why that is there, but I'm doing it here as well.
         delay(200);
 
-        // This returns 0 if there are no problems with the communication between the host and the TMC.
-        int connection = tmc_controllers[i].test_connection();
-
-        if ((connection == 0) && (tmc_controllers[i].CRCerror == false)) {
-          #if DEBUG_MODE == true
-            Serial.print("Established a successful connection over UART with TMC2208 #");
-            Serial.print(i);
-            Serial.print(" after ");
-            Serial.print(j);
-            Serial.print(" attempts.");
-            Serial.println();
-          #endif
-          leds[i] = CRGB::Green;
-          FastLED.show();
-          break;
+        // `test_connection` returns 0 if there are no problems with the communication between the host and the TMC.
+        // `.CRCerror` will be set to true if the most previous serial communication with the TMC was corrupted
+        if ((tmc_controllers[i].test_connection() == 0) && (tmc_controllers[i].CRCerror == false)) {
+          sucessful_config = true;
         } else {
-          #if DEBUG_MODE == true
-            Serial.print("UART connection with TMC2208 #");
-            Serial.print(i);
-            Serial.print(" failed. Failure count: ");
-            Serial.print(j);
-            Serial.println();
-          #endif
-          leds[i] = CRGB::Red;
-          FastLED.show();
+          num_config_attempts++; 
         }
       }
+
+      if (sucessful_config) {
+        #if DEBUG_MODE == true
+          Serial.print("Established a successful connection over UART with TMC2208 #");
+          Serial.print(i);
+          Serial.print(" after ");
+          Serial.print(num_config_attempts);
+          Serial.print(" attempts.");
+          Serial.println();
+        #endif
+        leds[i] = CRGB::Green;
+        FastLED.show();
+      } else {
+        #if DEBUG_MODE == true
+          Serial.print("Could not connect over UART with TMC2208 #");
+          Serial.print(i);
+          Serial.print(" after ");
+          Serial.print(num_config_attempts);
+          Serial.print(" attempts.");
+          Serial.println();
+        #endif
+        leds[i] = CRGB::Red;
+        FastLED.show();
+      } 
     }
+
+    delay(LED_UI_DELAY_MS);
+
+    // clear the status LEDs
+    for (int i = 0; i < NUM_PAIRS; i++) {
+      leds[i] = CRGB::Black;
+      FastLED.show();      
+    }
+    
   #endif
 
   pinMode(CALIBRATION_MODE_SWITCH_PIN, INPUT_PULLUP);
@@ -545,7 +568,7 @@ void loop() {
     leds[0] = CRGB::Black;
     FastLED.show();
 
-    delay(500);
+    delay(1000);
 
     leds[1] = CRGB::Red;
     FastLED.show();
@@ -554,6 +577,8 @@ void loop() {
     change_actuator_state(1, false);
     leds[1] = CRGB::Black;
     FastLED.show();
+
+    delay(1000);
     
   }
 
