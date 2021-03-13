@@ -26,86 +26,18 @@ For support:
     dev@esologic.com
 */
 
+#include "config.h"
+
 #include "wrapCounter.h"
-
-/*
-  Debug and test mode config
-*/
-
-// If set to true, will print debug messages to the serial console.
-#define DEBUG_MODE false
-
-/*
-  High level configuration constants
-*/
-
-#define AC_MOSFET 0  // Use the MOSFETs on the Cadence PCB to drive the solenoids or motors
-#define AC_MOTOR_SHIELD 1  // Use the Adafruit Motor Sheid v2 (https://www.adafruit.com/product/1438) to drive the actuators
-#define AC_TMC2208 2 // Use the TMC2208s on the Dripper PCB to drive the Stepper Motors, the MaschinenReich XP88-ST01
-
-// Set this to one of the options above
-#define ACTUATORS_CONTROL_MODE AC_TMC2208
-
-// Amount in milliseconds to hold solenoid on for if the actuator is a solenoid
-#define SOLENOID_ENABLE_TIME  100
 
 #define STATUS_LED_BLINK_OFF_TIME 100 // in ms. The amount of time for the status LED to be off when displaying a blink pattern to the user
 
-// Enable time is how long the motors will be on for a drip.
-// PWM value is the analogWirte value written to the controller. This is how "fast" the motor will spin.
-// These values must be tuned manually through experimentation
-#if ACTUATORS_CONTROL_MODE == AC_MOSFET
-  #define ACTUATOR_1_MOTOR_ENABLE_TIME 155
-  #define ACTUATOR_2_MOTOR_ENABLE_TIME 153
-  // these will be passed as analogWrite values
-  #define ACTUATOR_1_MOTOR_DRIVE_STRENGTH 110
-  #define ACTUATOR_2_MOTOR_DRIVE_STRENGTH 80
-#elif ACTUATORS_CONTROL_MODE == AC_MOTOR_SHIELD
-  #define ACTUATOR_1_MOTOR_ENABLE_TIME 155
-  #define ACTUATOR_2_MOTOR_ENABLE_TIME 155
-  // These will be written to the motor sheild's setSpeed method
-  #define ACTUATOR_1_MOTOR_DRIVE_STRENGTH 150
-  #define ACTUATOR_2_MOTOR_DRIVE_STRENGTH 150
-#elif ACTUATORS_CONTROL_MODE == AC_TMC2208
-  // TODO - this could lead to some steps being missed. Figure out a way to scale this so we don't cut off steps
-  #define ACTUATOR_1_MOTOR_ENABLE_TIME 400
-  #define ACTUATOR_2_MOTOR_ENABLE_TIME ACTUATOR_1_MOTOR_ENABLE_TIME
-  #define STEPPER_PUMP_MIN_STEPS_PER_DRIP 200
-  #define STEPPER_PUMP_MAX_STEPS_PER_DRIP 1500
-#else
-  #error "Invalid ACTUATORS_CONTROL_MODE"
-#endif
-
-#define ACTUATOR_1_SERIAL_CONTROL false
-#define ACTUATOR_2_SERIAL_CONTROL true
-
-#define ACTUATOR_1_MOTOR true
-#define ACTUATOR_2_MOTOR true
-
-// We can't drive non-motors with TMC2208, so stop compilation if user tries to configure this
-#if ACTUATORS_CONTROL_MODE == AC_TMC2208
-  #if ACTUATOR_1_MOTOR == false
-    #error "Non-motors cannot be driven with TMC2208, Actuator 1 will not work."
-  #endif
-  #if ACTUATOR_2_MOTOR == false
-    #error "Non-motors cannot be driven with TMC2208, Actuator 2 will not work."
-  #endif
-#endif
-
-/*
-  Pin mappings
-*/
-
-// Pins of all inputs and outputs
-#define PULSE1_PIN A0
-#define PULSE2_PIN A1
+// Amount in milliseconds to hold solenoid on for if the actuator is a solenoid
+#define DEFAULT_ACTUATOR_ENABLE_TIME  100
 
 #define NUM_PAIRS 2
 
-// TODO would like to seperate the concerns to a board level config. Using the cadence driver vs the silent dripper board
 #if ACTUATORS_CONTROL_MODE == AC_MOSFET
-  #define ACTUATOR1_PIN 11 // also soldered to 2
-  #define ACTUATOR2_PIN 3
   int actuator_pins[NUM_PAIRS] = {ACTUATOR1_PIN, ACTUATOR2_PIN};
 #elif ACTUATORS_CONTROL_MODE == AC_MOTOR_SHIELD
   #include <Wire.h>
@@ -116,17 +48,7 @@ For support:
   Adafruit_DCMotor *actuator_2 = AFMS.getMotor(2);
   Adafruit_DCMotor *actuator_controllers[NUM_PAIRS] = { actuator_1, actuator_2 };
 #elif ACTUATORS_CONTROL_MODE == AC_TMC2208
-
-  #define ACTUATOR_1_DRIP_SIZE_POT_PIN A2
-  #define ACTUATOR_2_DRIP_SIZE_POT_PIN A3
-  #define CALIBRATION_MODE_SWITCH_PIN 12
-
-  // TODO - more sniff, this has nothing to do with the drivers being used but the hardware the board is installed on.
-  #define LED_DATA_PIN A5 
-  #define LED_CLOCK_PIN A4
-
   #include <FastLED.h>
-  #define NUM_LEDS 3
   CRGB leds[NUM_LEDS];
 
   #define LED_UI_DELAY_MS 2000
@@ -142,18 +64,7 @@ For support:
   #define TMC_IRUN 9
   #define TMC_IHOLD 5
   #define TMC_GSTAT 0b111 
-  
-  #define TMC_1_SW_TX 2  // TMC2208 SoftwareSerial transmit pin
-  #define TMC_1_SW_RX 3  // TMC2208 SoftwareSerial receive pin
-  #define TMC_1_STEP_PIN 4  // Step
-  #define TMC_1_DIR_PIN 5  // Direction
-  #define TMC_1_EN_PIN 6  // Enable
-  #define TMC_2_SW_TX 7  // TMC2208 SoftwareSerial transmit pin
-  #define TMC_2_SW_RX 8  // TMC2208 SoftwareSerial receive pin
-  #define TMC_2_STEP_PIN 9  // Step
-  #define TMC_2_DIR_PIN 10  // Direction
-  #define TMC_2_EN_PIN 11  // Enable
-  
+    
   #define R_SENSE 0.11f  // SilentStepStick series use 0.11
   
   TMC2208Stepper tmc_controllers[NUM_PAIRS] = { TMC2208Stepper(TMC_1_SW_RX, TMC_1_SW_TX, R_SENSE), TMC2208Stepper(TMC_2_SW_RX, TMC_2_SW_TX, R_SENSE)  };
@@ -167,8 +78,6 @@ For support:
 #else
   #error "Invalid ACTUATORS_CONTROL_MODE"
 #endif
-
-#define STATUS_LED_PIN 5
 
 /*
   Communication Protocol Def
@@ -276,7 +185,7 @@ int lookup_actuator_enable_time(int actuator_index) {
   if (actuator_is_motor[actuator_index]) {
     return motor_enable_times[actuator_index];
   } else {
-    return SOLENOID_ENABLE_TIME;
+    return DEFAULT_ACTUATOR_ENABLE_TIME;
   }
   
 }
@@ -442,7 +351,7 @@ void setup() {
         delay(200);
 
         // `test_connection` returns 0 if there are no problems with the communication between the host and the TMC.
-        // `.CRCerror` will be set to true if the most previous serial communication with the TMC was corrupted
+        // `.CRCerror` will be set to true if the most previous serial communication with the TMC was corrupted.
         if ((tmc_controllers[i].test_connection() == 0) && (tmc_controllers[i].CRCerror == false)) {
           sucessful_config = true;
         } else {
@@ -592,7 +501,7 @@ void loop() {
         Serial.write(COMMAND_HEARTBEAT);  // echo back
         break;
       case COMMAND_SERVICE_STARTED:
-        status_led_blink(3, 300);  // three heshort blinks when we expect to start processing commands.
+        status_led_blink(3, 300);  // three short blinks when we expect to start processing commands.
         Serial.write(COMMAND_SERVICE_STARTED);  // echo back
         break;
       case COMMAND_SERVICE_CRASHED:
