@@ -82,12 +82,12 @@
   Pin mappings
 */
 
-// Pins of all inputs and outputs
+// Heartbeat sensors are on the same pins across all hardware iterations.
 #define PULSE1_PIN A0
 #define PULSE2_PIN A1
 
 #if PLATFORM == PLATFORM_CADENCE_PCB
-  #define ACTUATOR1_PIN 11 // also soldered to 2
+  #define ACTUATOR1_PIN 11 // also soldered to 2 on 2020 version of the board.
   #define ACTUATOR2_PIN 3
   #define STATUS_LED_PIN 5
 #elif PLATFORM == PLATFORM_ADAFRUIT_MOTOR_SHIELD

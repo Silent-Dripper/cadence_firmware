@@ -264,8 +264,28 @@ void update_is_person_attached_to_pulse_sensor(int sensor_index) {
     Serial.println();
   #endif
 }
+/*
+ * TODO
+ * status_led_blink should be able to use the 3rd LED in silent dripper mode to communicate status
+ * Should abstact out functions to communicate motor state, fault/nominal/active/disabled
+ * only the sd platform would support, but could add it in other code revisions as needed.
+ * motor state function, status led blink function, and change motor state are all going to be very heavily #defined functions.
+ */
+
 
 void setup() {
+
+  // Enable serial port first so we're able to write debug output if there are problems.
+  Serial.begin(9600);
+
+  #if PLATFORM == PLATFORM_CADENCE_PCB
+    pinMode(STATUS_LED_PIN, OUTPUT);
+  #elif PLATFORM == PLATFORM_ADAFRUIT_MOTOR_SHIELD
+    // No specific pins we need to define here.
+  #elif PLATFORM == PLATFORM_SILENT_DRIPPER_PCB
+    FastLED.addLeds<APA102, LED_DATA_PIN, LED_CLOCK_PIN, BGR>(leds, NUM_LEDS);
+    pinMode(CALIBRATION_MODE_SWITCH_PIN, INPUT_PULLUP);
+  #endif
 
   // Initialize actuator controllers
   #if ACTUATORS_CONTROL_MODE == AC_MOSFET
@@ -285,10 +305,6 @@ void setup() {
     pinMode(TMC_2_STEP_PIN, OUTPUT);
     pinMode(TMC_2_DIR_PIN, OUTPUT);
     digitalWrite(TMC_2_EN_PIN, LOW);  // enable the driver
-
-    Serial.begin(9600);
-
-    FastLED.addLeds<APA102, LED_DATA_PIN, LED_CLOCK_PIN, BGR>(leds, NUM_LEDS);
 
     for (int i = 0; i < NUM_PAIRS; i++) {
       leds[i] = CRGB::Yellow;
@@ -394,11 +410,6 @@ void setup() {
     
   #endif
 
-  pinMode(CALIBRATION_MODE_SWITCH_PIN, INPUT_PULLUP);
-
-  // TODO, this isn't valid
-  pinMode(STATUS_LED_PIN, OUTPUT);
-
   for (int pair_index = 0; pair_index < NUM_PAIRS; pair_index++) {
     analysis_history_index[pair_index] = wrapCounter(NUM_HISTORIC_ANALYSIS);
     sample_entry_counter[pair_index] = wrapCounter(VALUE_INTO_ANALYSIS_EVERY_N_SAMPLES);
@@ -462,34 +473,35 @@ void setup() {
     TIMSK2 |= (1 << OCIE2A); 
   #endif
   
-
 }
 
 void loop() {
 
-  while (digitalRead(CALIBRATION_MODE_SWITCH_PIN) == LOW) {
-    
-    leds[0] = CRGB::Red;
-    FastLED.show();
-    change_actuator_state(0, true);
-    delay(ACTUATOR_1_MOTOR_ENABLE_TIME);
-    change_actuator_state(0, false);
-    leds[0] = CRGB::Black;
-    FastLED.show();
-
-    delay(1000);
-
-    leds[1] = CRGB::Red;
-    FastLED.show();
-    change_actuator_state(1, true);
-    delay(ACTUATOR_2_MOTOR_ENABLE_TIME);
-    change_actuator_state(1, false);
-    leds[1] = CRGB::Black;
-    FastLED.show();
-
-    delay(1000);
-    
-  }
+  #if PLATFORM == PLATFORM_CADENCE_PCB
+    while (digitalRead(CALIBRATION_MODE_SWITCH_PIN) == LOW) {
+      
+      leds[0] = CRGB::Red;
+      FastLED.show();
+      change_actuator_state(0, true);
+      delay(ACTUATOR_1_MOTOR_ENABLE_TIME);
+      change_actuator_state(0, false);
+      leds[0] = CRGB::Black;
+      FastLED.show();
+  
+      delay(1000);
+  
+      leds[1] = CRGB::Red;
+      FastLED.show();
+      change_actuator_state(1, true);
+      delay(ACTUATOR_2_MOTOR_ENABLE_TIME);
+      change_actuator_state(1, false);
+      leds[1] = CRGB::Black;
+      FastLED.show();
+  
+      delay(1000);
+      
+    }
+  #endif
 
   bool serial_actuator_enabled = false;
 
