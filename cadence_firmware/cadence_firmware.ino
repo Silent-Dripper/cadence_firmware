@@ -27,7 +27,7 @@
 */
 
 #include "config.h"
-#include "status_enums.h"
+#include "enums.h"
 
 #include "wrapCounter.h"
 
@@ -336,7 +336,7 @@ void communicate_actuator_status(int motor_index, ActuatorStatus s) {
 void setup() {
 
   // Enable serial port first so we're able to write debug output if there are problems.
-  Serial.begin(9600);
+  Serial.begin(115200);
 
 #if PLATFORM == PLATFORM_CADENCE_PCB
   pinMode(STATUS_LED_PIN, OUTPUT);
@@ -609,7 +609,6 @@ void loop() {
 
     if (actuator_enabled[pair_index]) {
       if (start_actuator) {
-        //fastled code goes above here
         change_actuator_state(pair_index, HIGH); // enables the actuator
       }
       if (millis() - actuation_start_time[pair_index] > lookup_actuator_enable_time(pair_index)) {
