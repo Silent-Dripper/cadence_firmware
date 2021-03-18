@@ -328,6 +328,7 @@ void setup() {
   // No specific pins we need to define here.
 #elif PLATFORM == PLATFORM_SILENT_DRIPPER_PCB
   FastLED.addLeds<APA102, LED_DATA_PIN, LED_CLOCK_PIN, BGR>(leds, NUM_LEDS);
+  FastLED.setBrightness(LED_BRIGHTNESS);
   pinMode(CALIBRATION_MODE_SWITCH_PIN, INPUT_PULLUP);
 #endif
 

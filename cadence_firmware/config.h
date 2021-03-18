@@ -49,7 +49,7 @@
 #define ACTUATORS_CONTROL_MODE AC_TMC2208
 // Number of Neopixels on board the PCB
 #define NUM_LEDS 3
-#define LED_BRIGHTNESS 75
+#define LED_BRIGHTNESS 25
 // This LED is used to communicate the status of the communication with a PC host, see `status_led_blink` for more.
 #define SERIAL_STATUS_LED_INDEX 2
 #else
