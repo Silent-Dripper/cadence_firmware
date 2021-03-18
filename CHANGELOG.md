@@ -7,11 +7,6 @@
 * Used a lot of compiler switching to abstract out differences in these different platforms.
 * Added a python script, `protocol_tester.py` to this repo to be able to debug the serial communication protocol.
 
-TODO:
-
-* Added doxygen docstrings.
-* Added `clang-format` style linting.
-
 ## 5.2.0 - (2020-11-7)
 
 * Set different enable times/pwm values depending on if the firmware is using the Adafruit Motor Sheild v2 or the MOSFETs on the Cadence PCB.
