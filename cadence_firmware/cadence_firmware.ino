@@ -1,15 +1,8 @@
 /*
-  Trigger actuators (solenoids or pumps) based on human heartbeats via a pulse sensor or messages from a host PC.
-
-  Pins:
-    ACTUATOR 1 - D2/D11
-    ACTUATOR 2 - D3
-    Status LED - D5
-    Heartbeat Sensor 1 - A0
-    Heartbeat Sensor 2 - A1
+  Trigger actuators (solenoids or pumps) based on human heartbeats via pulse sensors or serial messages from a host PC.
 
   Usage Notes:
-      Edit "High level configuration constants" to tune most of the application.
+      Edit `config.h` to tune most of the application.
       Pulse Sensor sample aquisition and processing happens in the background via Timer 1 interrupt. 1mS sample rate.
       PWM on pins 9 and 10 will not work when using this code!
 
@@ -17,10 +10,8 @@
       pulse_non_resetting:  boolean that is made true whenever pulse is found. User must reset.
       pulse_resetting:      boolean that is made true whenever pulse is found. ISR sets to false when the beat has completed.
 
-      When the host PC connects to twitch, the red LED on the PCB will blink 3 times quickly.
-      If the host PC becomes disconnected from twitch, the red LED on the PCB will blink twice slowly.
-      Set ACTUATOR_*_SERIAL_CONTROL to True if you want the corresponding actuator to be controlled via the serial port. False if you want it to be controlled by it's pulse sensor
-      Set ACTUATOR_*_MOTOR to True if it is a pump and false if it is a solenoid.
+      When the host PC connects to twitch, the indicator LED on the PCB will blink 3 times quickly.
+      If the host PC becomes disconnected from twitch, the indicator LED will blink twice slowly.
 
   For support:
     dev@esologic.com
@@ -28,7 +19,6 @@
 
 #include "config.h"
 #include "enums.h"
-
 #include "wrapCounter.h"
 
 /*
@@ -52,7 +42,7 @@
 #define NUM_PAIRS 2
 
 #if ACTUATORS_CONTROL_MODE == AC_MOSFET
-int actuator_pins[NUM_PAIRS] = {ACTUATOR1_PIN, ACTUATOR2_PIN};
+const int actuator_pins[NUM_PAIRS] = {ACTUATOR1_PIN, ACTUATOR2_PIN};
 #elif ACTUATORS_CONTROL_MODE == AC_MOTOR_SHIELD
 #include <Wire.h>
 #include <Adafruit_MotorShield.h>
@@ -60,17 +50,15 @@ int actuator_pins[NUM_PAIRS] = {ACTUATOR1_PIN, ACTUATOR2_PIN};
 Adafruit_MotorShield AFMS = Adafruit_MotorShield();
 Adafruit_DCMotor *actuator_1 = AFMS.getMotor(1);
 Adafruit_DCMotor *actuator_2 = AFMS.getMotor(2);
-Adafruit_DCMotor *actuator_controllers[NUM_PAIRS] = { actuator_1, actuator_2 };
+const Adafruit_DCMotor *actuator_controllers[NUM_PAIRS] = { actuator_1, actuator_2 };
 #elif ACTUATORS_CONTROL_MODE == AC_TMC2208
 #include <FastLED.h>
 CRGB leds[NUM_LEDS];
 
 #define LED_UI_DELAY_MS 2000
-
 #define NUM_TMC_CONFIG_ATTEMPTS 10
-
 #include <TMCStepper.h>
-#define TMC_BAUD_RATE 4800
+#define TMC_BAUD_RATE 4800  // Both will be set to this baud rate, determined through experimentation
 #define TMC_PDN_DISABLE true   // Use UART 
 #define TMC_I_SCALE_ANALOG 0  // Adjust current from the register
 #define TMC_RMS_CURRENT 1000  // Set driver current 1A
@@ -78,14 +66,13 @@ CRGB leds[NUM_LEDS];
 #define TMC_IRUN 9
 #define TMC_IHOLD 5
 #define TMC_GSTAT 0b111
-
-#define R_SENSE 0.11f  // SilentStepStick series use 0.11
+#define R_SENSE 0.11f  // The SilentStepStick series drivers, including the TMC2208 use 0.11
 
 TMC2208Stepper tmc_controllers[NUM_PAIRS] = { TMC2208Stepper(TMC_1_SW_RX, TMC_1_SW_TX, R_SENSE), TMC2208Stepper(TMC_2_SW_RX, TMC_2_SW_TX, R_SENSE)  };
 
-int tmc_enable_pins[NUM_PAIRS] = { TMC_1_EN_PIN, TMC_2_EN_PIN };
-int tmc_step_pins[NUM_PAIRS] = { TMC_1_STEP_PIN, TMC_2_STEP_PIN };
-int drip_size_pot_pins[NUM_PAIRS] = { ACTUATOR_1_DRIP_SIZE_POT_PIN, ACTUATOR_2_DRIP_SIZE_POT_PIN };
+const int tmc_enable_pins[NUM_PAIRS] = { TMC_1_EN_PIN, TMC_2_EN_PIN };
+const int tmc_step_pins[NUM_PAIRS] = { TMC_1_STEP_PIN, TMC_2_STEP_PIN };
+const int drip_size_pot_pins[NUM_PAIRS] = { ACTUATOR_1_DRIP_SIZE_POT_PIN, ACTUATOR_2_DRIP_SIZE_POT_PIN };
 // These two variables are used to control the motors
 volatile bool tmc_step_pin_value[NUM_PAIRS] = { false, false};
 volatile unsigned long tmc_remaining_steps[NUM_PAIRS] = { 0, 0 };
@@ -137,14 +124,14 @@ volatile unsigned long previous_negative_analysis_time[NUM_PAIRS] = { 0 };
 volatile boolean pulse_resetting[NUM_PAIRS] = {false, false};     // true when inside a pulse, false otherwise
 volatile boolean pulse_non_resetting[NUM_PAIRS] = {false, false}; // true when a new pulse starts, does not get set to false with the ISR
 
-bool actuator_controlled_via_serial_port[NUM_PAIRS] = {ACTUATOR_1_SERIAL_CONTROL, ACTUATOR_2_SERIAL_CONTROL};
-int pulse_sensor_pins[NUM_PAIRS] = {PULSE1_PIN, PULSE2_PIN};
+const bool actuator_controlled_via_serial_port[NUM_PAIRS] = {ACTUATOR_1_SERIAL_CONTROL, ACTUATOR_2_SERIAL_CONTROL};
+const int pulse_sensor_pins[NUM_PAIRS] = {PULSE1_PIN, PULSE2_PIN};
 
-bool actuator_is_motor[NUM_PAIRS] = {ACTUATOR_1_MOTOR, ACTUATOR_2_MOTOR};
-int motor_enable_times[NUM_PAIRS] = {ACTUATOR_1_MOTOR_ENABLE_TIME, ACTUATOR_2_MOTOR_ENABLE_TIME};
+const bool actuator_is_motor[NUM_PAIRS] = {ACTUATOR_1_MOTOR, ACTUATOR_2_MOTOR};
+const int motor_enable_times[NUM_PAIRS] = {ACTUATOR_1_MOTOR_ENABLE_TIME, ACTUATOR_2_MOTOR_ENABLE_TIME};
 
 #if ACTUATORS_CONTROL_MODE == AC_MOSFET || ACTUATORS_CONTROL_MODE == AC_MOTOR_SHIELD
-int motor_drive_strengths[NUM_PAIRS] = {ACTUATOR_1_MOTOR_DRIVE_STRENGTH, ACTUATOR_2_MOTOR_DRIVE_STRENGTH};
+const int motor_drive_strengths[NUM_PAIRS] = {ACTUATOR_1_MOTOR_DRIVE_STRENGTH, ACTUATOR_2_MOTOR_DRIVE_STRENGTH};
 #endif
 
 bool pulse_sensor_enabled[NUM_PAIRS] = { false , false };
@@ -161,7 +148,7 @@ void status_led_blink(int num_blinks, int on_time) {
 #if PLATFORM == PLATFORM_CADENCE_PCB
     digitalWrite(STATUS_LED_PIN, HIGH);
 #elif PLATFORM == PLATFORM_ADAFRUIT_MOTOR_SHIELD
-    // TODO - There are no LEDs visible on this config, we could add if needed.
+    // TODO: There are no LEDs visible on this config, we could add if needed.
 #elif PLATFORM == PLATFORM_SILENT_DRIPPER_PCB
     leds[SERIAL_STATUS_LED_INDEX] = CRGB::Blue;
     FastLED.show();
@@ -170,7 +157,7 @@ void status_led_blink(int num_blinks, int on_time) {
 #if PLATFORM == PLATFORM_CADENCE_PCB
     digitalWrite(STATUS_LED_PIN, LOW);
 #elif PLATFORM == PLATFORM_ADAFRUIT_MOTOR_SHIELD
-    // TODO - There are no LEDs visible on this config, we could add if needed.
+    // TODO: There are no LEDs visible on this config, we could add if needed.
 #elif PLATFORM == PLATFORM_SILENT_DRIPPER_PCB
     leds[SERIAL_STATUS_LED_INDEX] = CRGB::Black;
     FastLED.show();
@@ -211,7 +198,7 @@ float standard_deviation(volatile int * val, int array_length) {
 }
 
 int lookup_actuator_enable_time(int actuator_index) {
-  // TODO: could probably do this with a macro but not worth the complexity now
+  // TODO: Could probably do this with a macro.
   if (actuator_is_motor[actuator_index]) {
     return motor_enable_times[actuator_index];
   } else {
@@ -305,9 +292,9 @@ void update_is_person_attached_to_pulse_sensor(int sensor_index) {
 void communicate_actuator_status(int motor_index, ActuatorStatus s) {
 
 #if PLATFORM == PLATFORM_CADENCE_PCB
-  // TODO, we could blink out some status here but would be hard with only a single LED.
+  // TODO: We could blink out some status here but would be hard with only a single LED.
 #elif PLATFORM == PLATFORM_ADAFRUIT_MOTOR_SHIELD
-  // TODO, there aren't any LEDs on the adafruit motor shield, maybe we could add them manually if this becomes needed.
+  // TODO: There aren't any LEDs on the adafruit motor shield, maybe we could add them manually if this becomes needed.
 #elif PLATFORM == PLATFORM_SILENT_DRIPPER_PCB
   switch (s) {
     case unconfigured:
@@ -328,9 +315,6 @@ void communicate_actuator_status(int motor_index, ActuatorStatus s) {
   }
   FastLED.show();
 #endif
-
-
-
 }
 
 void setup() {
@@ -372,13 +356,10 @@ void setup() {
 
   delay(LED_UI_DELAY_MS);
 
-  bool sucessful_config;
-  int num_config_attempts;
-
   for (int i = 0; i < NUM_PAIRS; i++) {
 
-    sucessful_config = false;
-    num_config_attempts = 0;
+    bool sucessful_config = false;
+    int num_config_attempts = 0;
 
     while (sucessful_config == false && num_config_attempts < NUM_TMC_CONFIG_ATTEMPTS) {
 
@@ -466,6 +447,13 @@ void setup() {
 #endif
 
   for (int pair_index = 0; pair_index < NUM_PAIRS; pair_index++) {
+
+    // If a given sensor isn't going to be used, disable it.
+    if (actuator_controlled_via_serial_port[pair_index]) {
+      pinMode(pulse_sensor_pins[pair_index], OUTPUT);
+      digitalWrite(pulse_sensor_pins[pair_index], LOW);
+    }
+    
     analysis_history_index[pair_index] = wrapCounter(NUM_HISTORIC_ANALYSIS);
     sample_entry_counter[pair_index] = wrapCounter(VALUE_INTO_ANALYSIS_EVERY_N_SAMPLES);
 
@@ -503,7 +491,7 @@ void setup() {
 
   // Set the compare match register for TIMER1 to trigger with a frequency of 1736hz.
   // Each time this value is reached, the pulse sensor is read.
-  OCR1A = 8;// = (16*10^6) / (1736*1024) - 1 (must be <65536)
+  OCR1A = 8;  // = (16*10^6) / (1736*1024) - 1 (must be <65536)
 
   // Enable the function inside of ISR(TIMER1_COMPA_vect).
   TIMSK1 |= (1 << OCIE1A);

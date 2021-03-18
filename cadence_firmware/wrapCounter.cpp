@@ -1,3 +1,8 @@
+/*
+  Object to create a number that wraps around when it is incremented/decremented past it's max values.
+  Used to manage array indicies.
+*/
+
 #include "Arduino.h"
 #include "wrapCounter.h"
 

@@ -1,3 +1,6 @@
+/*
+  Enums have to be in their own file because of the shortcomings of the Arduino IDE.
+*/
 
 enum ActuatorStatus {
   unconfigured,

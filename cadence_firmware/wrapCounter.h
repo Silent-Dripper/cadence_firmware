@@ -1,3 +1,7 @@
+/*
+  See the `.cpp` file for high level docs.
+*/
+
 #ifndef WRAPCOUNTER_h
 #define WRAPCOUNTER_h
 
