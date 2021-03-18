@@ -1,8 +1,16 @@
 # Changelog
 
-## 6.0.0 - (2021-2-xx)
+## 6.0.0 - (2021-xx-xx)
 
-* Added support to control stepper motor pumps using the TMC2208
+* Added support to control stepper motor pumps using the TMC2208.
+* Added `config.h` to be able to switch between different platforms. The Cadence PCB, the Adafruit Motor Shield v2 and the new Silent Dripper PCB.
+* Used a lot of compiler switching to abstract out differences in these different platforms.
+* Added a python script, `protocol_tester.py` to this repo to be able to debug the serial communication protocol.
+
+TODO:
+
+* Added doxygen docstrings.
+* Added `clang-format` style linting.
 
 ## 5.2.0 - (2020-11-7)
 

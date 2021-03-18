@@ -1,4 +1,4 @@
-# Serial Protocol Tester
+# Serial Protocol Example
 
 This program is a python implementation of the PC side of the serial communication protocol used
 in this project. 
@@ -20,5 +20,7 @@ If you're on windows or elsewhere, manually install the dependencies specified i
 With the venv activated, run `protocol_example.py` as follows:
 
 ```
-
+python serial_protocol_example.py --help
 ```
+
+Then read the docs and go from there!

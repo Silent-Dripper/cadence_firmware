@@ -166,9 +166,13 @@ void status_led_blink(int num_blinks, int on_time) {
   }
 }
 
-/*
-   Get the mean from an array of volatile long unsigned int
-*/
+/**
+ * @brief Calculate the mean of a given array of ints.
+ * 
+ * @param val A pointer to the array to calculate the mean of.
+ * @param array_length The number of items in the array.
+ * @return float
+ */
 float mean(volatile int * val, int array_length) {
   long unsigned int total = 0;
   for (int i = 0; i < array_length; i++) {
@@ -178,6 +182,13 @@ float mean(volatile int * val, int array_length) {
   return avg;
 }
 
+/**
+ * @brief Calculate the variance of a given array of ints.
+ * 
+ * @param val A pointer to the array to calculate the variance of.
+ * @param array_length The number of items in the array.
+ * @return float 
+ */
 float variance(volatile int * val, int array_length) {
   float avg = mean(val, array_length);
   long unsigned int total = 0;
@@ -188,17 +199,27 @@ float variance(volatile int * val, int array_length) {
   return total / (float)array_length;
 }
 
-/*
-   Get the standard deviation from an array of volatile long unsigned int
-*/
+/**
+ * @brief Get the standard deviation from an array of volatile long unsigned int.
+ * 
+ * @param val A pointer to the array to calculate the std. dev of.
+ * @param array_length The number of items in the array.
+ * @return float 
+ */
 float standard_deviation(volatile int * val, int array_length) {
   float v = variance(val, array_length);
   float std_dev = sqrt(v);
   return std_dev;
 }
 
+/**
+ * @brief Look up how long a given actuator should be enabled for.
+ * TODO: Could probably do this with a macro.
+ * 
+ * @param actuator_index The index of the actuator to look up the enable time for.
+ * @return int 
+ */
 int lookup_actuator_enable_time(int actuator_index) {
-  // TODO: Could probably do this with a macro.
   if (actuator_is_motor[actuator_index]) {
     return motor_enable_times[actuator_index];
   } else {
@@ -207,6 +228,12 @@ int lookup_actuator_enable_time(int actuator_index) {
 
 }
 
+/**
+ * @brief Enable/Disable the actuator at the given index.
+ * 
+ * @param actuator_index The index of the actuator we'd like to modify.
+ * @param enabled True if you want the actuator to be on (energized, spinning etc) False if otherwise.
+ */
 void change_actuator_state(int actuator_index, bool enabled) {
 
   if (enabled) {
@@ -249,6 +276,13 @@ void change_actuator_state(int actuator_index, bool enabled) {
   }
 }
 
+/**
+ * @brief Detect if a person is attached to the given pulse sensor. 
+ * Update the global data structures, `previous_negative_analysis_time` and `pulse_sensor_enabled`
+ * to reflect the outcome of this calculation.
+ * 
+ * @param sensor_index The pulse sensor to update the state of.
+ */
 void update_is_person_attached_to_pulse_sensor(int sensor_index) {
 
   float current_standard_deviation = standard_deviation(analysis_history[sensor_index], NUM_HISTORIC_ANALYSIS);
@@ -288,8 +322,14 @@ void update_is_person_attached_to_pulse_sensor(int sensor_index) {
 #endif
 }
 
-
-void communicate_actuator_status(int motor_index, ActuatorStatus s) {
+/**
+ * @brief Use onboard LEDs to display the status of a given actuator. Depending on the platform the arduino is 
+ * attached to, this function will do different things.
+ * 
+ * @param actuator_index 
+ * @param s 
+ */
+void communicate_actuator_status(int actuator_index, ActuatorStatus s) {
 
 #if PLATFORM == PLATFORM_CADENCE_PCB
   // TODO: We could blink out some status here but would be hard with only a single LED.
@@ -298,19 +338,19 @@ void communicate_actuator_status(int motor_index, ActuatorStatus s) {
 #elif PLATFORM == PLATFORM_SILENT_DRIPPER_PCB
   switch (s) {
     case unconfigured:
-      leds[motor_index] = CRGB::Yellow;
+      leds[actuator_index] = CRGB::Yellow;
       break;
     case good_config:
-      leds[motor_index] = CRGB::Green;
+      leds[actuator_index] = CRGB::Green;
       break;
     case bad_config:
-      leds[motor_index] = CRGB::Red;
+      leds[actuator_index] = CRGB::Red;
       break;
     case actuator_stopped:
-      leds[motor_index] = CRGB::Black;
+      leds[actuator_index] = CRGB::Black;
       break;
     case actuator_running:
-      leds[motor_index] = CRGB::Purple;
+      leds[actuator_index] = CRGB::Purple;
       break;
   }
   FastLED.show();
