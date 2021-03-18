@@ -6,6 +6,8 @@
 * Added `config.h` to be able to switch between different platforms. The Cadence PCB, the Adafruit Motor Shield v2 and the new Silent Dripper PCB.
 * Used a lot of compiler switching to abstract out differences in these different platforms.
 * Added a python script, `protocol_tester.py` to this repo to be able to debug the serial communication protocol.
+* Formatted the `c++` code using `clang-format`.
+* Added doxygen style docstrings to each of the functions/objects in the codebase.
 
 ## 5.2.0 - (2020-11-7)
 
