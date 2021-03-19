@@ -50,11 +50,34 @@ To use this platform, the following Arduino libraries have to be installed:
 * [FastLED](https://www.arduino.cc/reference/en/libraries/fastled/)
 * [TMCStepper](https://www.arduino.cc/reference/en/libraries/tmcstepper/)
 
+#### LED blink codes
+
+`LED1` maps to the first TMC/Motor, and `LED2` to the second. `LED3` is referred to as the "Indicator LED" in the firmware and relays status for the serial protocol.
+
+##### Startup 
+
+On startup, the Arduino writes to the TMC's to set their drive parameters and query status.
+
+* If the LED is yellow, it means the config is being written.
+* If the LED is green, it means the TMC is correctly configured and will behave normally.
+* If the LED is red, it means that the TMC is in some sort of a fault state. 
+
+##### Run
+
+* LEDs 1/2 will turn purple if their corresponding motor is enabled and spinning, and turn off if they are disabled.
+*  LED3, the indicator LED will blink blue 3 times quickly to indicate that the host PC will start sending messages.
+* LED3 will emit 2 long blue blinks to indicate that the host PC has crashed and needs attention.
+* LED3 will blink green if it receives a `PULSE_LED` command.
+
 ### Cadence PCB
 
 ![Photo of Cadence PCB Render](media/cadence-pcb.PNG)
 
 The first use-case for this firmware. Used to drive solenoids via MOSFETs for [Cadence](https://www.saradittrich.com/Cadence).
+
+#### LED blink codes
+
+Same indicator LED blinks on D3 as `Silent Dripper PCB`.
 
 ### Adafruit Motor Shield v2
 
