@@ -1,9 +1,70 @@
 # Cadence Firmware
 
-The core firmware is in `./cadence-firmware`. This is the code that should be uploaded in a production environment.
+This projects aims to:
 
-There are a few test sketches in `./test` that verify the functionality in the core `cadence-firmware`. For each of these sketches, there may or may not be docs at the top of the respective `.ino`s. 
+* Read in analog voltages from a [pulse sensor](https://pulsesensor.com/).
+* Apply filtering on this signal to determine when heartbeats occur.
+* Then drive an actuator upon detecting a heartbeat, or receiving a message over the serial port.
 
+The project was completed on commission for the artist [Sara Dittrich](https://www.saradittrich.com/), and used in several of her works:
+
+* [Cadence](https://www.saradittrich.com/Cadence)
+* [The Tender Interval](https://www.saradittrich.com/The-Tender-Interval)
+
+The goal with releasing it is to provide an example project for people looking to use these pulse sensors asynchronously.
+
+## Overview
+
+The Arduino sketch is written to be run on any atmel328-based Arduino, including the Uno and Nano boards. Timers (TIMER1 + TIMER2) are used to consistently read from the sensors and in some configurations drive stepper motors.
+
+A very small serial communication protocol is also implemented to also be able to drive actuators via commands from a host PC. Up to two pulse sensors can drive up to two actuators at a time. See `./serial_protocol_tester` for a python implementation of this protocol.
+
+The core firmware, including the `.ino` file is in `./cadence-firmware`. This is the code that should be uploaded in a production environment.
+
+`config.h` in that directory can be used to tune many aspects of the firmware, including which hardware platform/types of actuators are expected.
+
+There are a few test sketches in `./test` that verify the functionality in the core `cadence-firmware`. These are mostly to aide development and debugging. For each of these sketches, there may or may not be docs at the top of the respective `.ino`s. 
+
+## Platforms
+
+Several different hardware platforms are supported to enable re-use of the core functionality across different projects.
+
+Note: See the
+
+```
+/*
+  Pin mappings
+*/
+```
+
+Section of `config.h` to understand how each of these circuits should connect to the Arduino. 
+
+### Silent Dripper PCB
+
+![Photo of Silent Dripper PCB](media/silent-dripper.JPG)
+
+This configuration leverages the TMC2208 to drive small stepper motor peristaltic pumps to water droplets in complete silence. For a technical overview of this use-case see this [blog post](www.esologic.com/silent-dripper).
+
+To use this platform, the following Arduino libraries have to be installed:
+
+* [FastLED](https://www.arduino.cc/reference/en/libraries/fastled/)
+* [TMCStepper](https://www.arduino.cc/reference/en/libraries/tmcstepper/)
+
+### Cadence PCB
+
+![Photo of Cadence PCB Render](media/cadence-pcb.PNG)
+
+The first use-case for this firmware. Used to drive solenoids via MOSFETs for [Cadence](https://www.saradittrich.com/Cadence).
+
+### Adafruit Motor Shield v2
+
+![Photo of Adafruit Motor Shield Implementation](media/adafruit.JPG)
+
+This configuration was used to drive the first iteration of [The Tender Interval](https://www.saradittrich.com/The-Tender-Interval).
+
+To use this platform, the following Arduino libraries have to be installed:
+
+* [Adafruit Motor Shield v2](https://github.com/adafruit/Adafruit_Motor_Shield_V2_Library)
 
 ## Contributing
 

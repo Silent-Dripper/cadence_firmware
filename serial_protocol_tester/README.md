@@ -23,4 +23,4 @@ With the venv activated, run `protocol_example.py` as follows:
 python serial_protocol_example.py --help
 ```
 
-Then read the docs and go from there!
+Then read the docs and go from there.
