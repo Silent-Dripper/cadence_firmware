@@ -35,14 +35,15 @@
 #define ACTUATOR_1_SERIAL_CONTROL false
 #define ACTUATOR_2_SERIAL_CONTROL true
 
-#define AC_MOSFET                                                              \
-  0 // Use the MOSFETs on the Cadence PCB to drive the solenoids or motors.
-#define AC_MOTOR_SHIELD                                                        \
-  1 // Use the Adafruit Motor Shield v2 (https://www.adafruit.com/product/1438)
-    // to drive the actuators.
-#define AC_TMC2208                                                             \
-  2 // Use the TMC2208s on the Silent Dripper PCB to drive the Stepper Motors,
-    // the MaschinenReich XP88-ST01.
+// Use the MOSFETs on the Cadence PCB to drive the solenoids or motors.
+#define AC_MOSFET 0
+// Use the Adafruit Motor Shield v2 (https://www.adafruit.com/product/1438) to
+// drive the actuators.
+#define AC_MOTOR_SHIELD 1
+
+// Use the TMC2208s on the Silent Dripper PCB to drive the Stepper Motors, the
+// MaschinenReich XP88-ST01.
+#define AC_TMC2208 2
 
 #define ACTUATOR_1_MOTOR true
 #define ACTUATOR_2_MOTOR true

@@ -39,9 +39,9 @@
 #endif
 #endif
 
-#define STATUS_LED_BLINK_OFF_TIME                                              \
-  100 // in ms. The amount of time for the status LED to be off when displaying
-      // a blink pattern to the user
+// in ms. The amount of time for the status LED to be off when displaying a
+// blink pattern to the user
+#define STATUS_LED_BLINK_OFF_TIME 100
 
 // Amount in milliseconds to hold solenoid on for if the actuator is a solenoid
 #define DEFAULT_ACTUATOR_ENABLE_TIME 100
@@ -66,8 +66,8 @@ CRGB leds[NUM_LEDS];
 #define LED_UI_DELAY_MS 2000
 #define NUM_TMC_CONFIG_ATTEMPTS 10
 #include <TMCStepper.h>
-#define TMC_BAUD_RATE                                                          \
-  4800 // Both will be set to this baud rate, determined through experimentation
+// Both will be set to this baud rate, determined through experimentation
+#define TMC_BAUD_RATE 4800
 #define TMC_PDN_DISABLE true // Use UART
 #define TMC_I_SCALE_ANALOG 0 // Adjust current from the register
 #define TMC_RMS_CURRENT 1000 // Set driver current 1A
@@ -75,8 +75,8 @@ CRGB leds[NUM_LEDS];
 #define TMC_IRUN 9
 #define TMC_IHOLD 5
 #define TMC_GSTAT 0b111
-#define R_SENSE                                                                \
-  0.11f // The SilentStepStick series drivers, including the TMC2208 use 0.11
+// The SilentStepStick series drivers, including the TMC2208 use 0.11
+#define R_SENSE 0.11f
 
 TMC2208Stepper tmc_controllers[NUM_PAIRS] = {
     TMC2208Stepper(TMC_1_SW_RX, TMC_1_SW_TX, R_SENSE),
@@ -97,28 +97,31 @@ volatile unsigned long tmc_remaining_steps[NUM_PAIRS] = {0, 0};
   Communication Protocol Def
 */
 
-#define COMMAND_HEARTBEAT                                                      \
-  0x01 // host PC sending a command for us to respond to to say we're still here
-#define COMMAND_SERVICE_STARTED                                                \
-  0x02 // host PC saying the service is started and we should expect to get
-       // commands
-#define COMMAND_SERVICE_CRASHED                                                \
-  0x03 // host PC informing us that they have crashed and we will not be getting
-       // any more commands
-#define COMMAND_PULSE_LED                                                      \
-  0x04 // host PC is telling us to trigger the actuator pin, and blink the LED
-#define COMMAND_PULSE_NO_LED                                                   \
-  0x05 // host PC is telling us to trigger the actuator pin without blinking the
-       // LED
+// host PC sending a command for us to respond to to say we're still here
+#define COMMAND_HEARTBEAT 0x01
+
+// host PC saying the service is started and we should expect to get commands
+#define COMMAND_SERVICE_STARTED 0x02
+
+// host PC informing us that they have crashed and we will not be getting any
+// more commands
+#define COMMAND_SERVICE_CRASHED 0x03
+
+// host PC is telling us to trigger the actuator pin, and blink the LED
+#define COMMAND_PULSE_LED 0x04
+
+// host PC is telling us to trigger the actuator pin without blinking the LED
+#define COMMAND_PULSE_NO_LED 0x05
 
 /*
   Program Body
 */
 
-volatile unsigned long last_beat_time[NUM_PAIRS] = {
-    0, 0}; // used to find the time between beats
-volatile unsigned long last_sample_time[NUM_PAIRS] = {
-    0, 0}; // used to determine pulse timing
+// used to find the time between beats
+volatile unsigned long last_beat_time[NUM_PAIRS] = {0, 0};
+
+// used to determine pulse timing
+volatile unsigned long last_sample_time[NUM_PAIRS] = {0, 0};
 
 // To avoid false positives
 #define MIN_TIME_BETWEEN_BEATS 400
@@ -145,11 +148,11 @@ wrapCounter sample_entry_counter[NUM_PAIRS];
 volatile unsigned long previous_negative_analysis_time[NUM_PAIRS] = {0};
 
 // these are volatile because they are used inside of the ISR
-volatile boolean pulse_resetting[NUM_PAIRS] = {
-    false, false}; // true when inside a pulse, false otherwise
-volatile boolean pulse_non_resetting[NUM_PAIRS] = {
-    false, false}; // true when a new pulse starts, does not get set to false
-                   // with the ISR
+// true when inside a pulse, false otherwise
+volatile boolean pulse_resetting[NUM_PAIRS] = {false, false};
+
+// true when a new pulse starts, does not get set to false with the ISR
+volatile boolean pulse_non_resetting[NUM_PAIRS] = {false, false};
 
 const bool actuator_controlled_via_serial_port[NUM_PAIRS] = {
     ACTUATOR_1_SERIAL_CONTROL, ACTUATOR_2_SERIAL_CONTROL};
@@ -172,8 +175,14 @@ volatile unsigned long actuation_start_time[NUM_PAIRS] = {0, 0};
 int most_recent_drip_command_type;
 bool serial_message_needs_responding_to = false;
 
+/**
+ * @brief Blink the indicator LED in a given pattern. Indicates to user how
+ * things are going.
+ *
+ * @param num_blinks The number of blinks to pulse on the LED.
+ * @param on_time The amount of time in ms to hold the blink on for.
+ */
 void status_led_blink(int num_blinks, int on_time) {
-  // Blink the LED in a given pattern. Indicates to user how things are going.
 
   for (int i = 0; i < num_blinks; i++) {
 #if PLATFORM == PLATFORM_CADENCE_PCB
@@ -609,8 +618,8 @@ void setup() {
   // Set the compare match register for TIMER2 to trigger with a frequency of
   // ~9615.4hz. A rising edge will be sent to the step pin of a TMC every other
   // clock cycle, or in this case every 3mS. If that TMC is enabled.
-  OCR2A = 12; // = (16*10^6) / (3000 * 128) - 1 (must be <255 because it's only
-              // 1 byte)
+  // = (16*10^6) / (3000 * 128) - 1 (must be <255 because it's only 1 byte)
+  OCR2A = 12; 
   // Enable the function inside of ISR(TIMER2_COMPA_vect).
   TIMSK2 |= (1 << OCIE2A);
 #endif
@@ -641,13 +650,13 @@ void loop() {
       Serial.write(COMMAND_HEARTBEAT); // echo back
       break;
     case COMMAND_SERVICE_STARTED:
-      status_led_blink(3, 300); // three short blinks when we expect to start
-                                // processing commands.
+      // three short blinks when we expect to start processing commands.
+      status_led_blink(3, 300);
       Serial.write(COMMAND_SERVICE_STARTED); // echo back
       break;
     case COMMAND_SERVICE_CRASHED:
-      status_led_blink(2, 1000); // two long blinks if something bad happens on
-                                 // the pi/PC end of things.
+      // two long blinks if something bad happens on the pi/PC end of things.
+      status_led_blink(2, 1000);
       Serial.write(COMMAND_SERVICE_CRASHED); // echo back
       break;
     case COMMAND_PULSE_LED:
@@ -672,9 +681,7 @@ void loop() {
   }
 
   for (int pair_index = 0; pair_index < NUM_PAIRS; pair_index++) {
-
     bool start_actuator = false;
-
     // Either accept a command from the PC or read from the pulse sensor
     if (actuator_controlled_via_serial_port[pair_index] == true) {
       if (serial_actuator_enabled) {
@@ -726,26 +733,25 @@ ISR(TIMER1_COMPA_vect) {
   for (int pair_index = 0; pair_index < NUM_PAIRS; pair_index++) {
     int pulse_signal = analogRead(pulse_sensor_pins[pair_index]);
     last_sample_time[pair_index] = millis();
-    int time_delta = last_sample_time[pair_index] -
-                     last_beat_time[pair_index]; // monitor the time since the
-                                                 // last beat to avoid noise
+    // monitor the time since the last beat to avoid noise
+    int time_delta = last_sample_time[pair_index] - last_beat_time[pair_index];
+
     if ((pulse_signal > PULSE_START_READING_MIN_THRESHOLD) &&
         (pulse_resetting[pair_index] == false) &&
         (time_delta > MIN_TIME_BETWEEN_BEATS)) {
-      last_beat_time[pair_index] =
-          last_sample_time[pair_index]; // keep track of time for next pulse
-      pulse_non_resetting[pair_index] =
-          true; // set Quantified Self flag when beat is found and BPM gets
-                // updated, QS FLAG IS NOT CLEARED INSIDE THIS ISR
-      pulse_resetting[pair_index] =
-          true; // set the pulse flag when we think there is a pulse
+      // keep track of time for next pulse
+      last_beat_time[pair_index] = last_sample_time[pair_index];
+      // set Quantified Self flag when beat is found and BPM gets updated, QS
+      // FLAG IS NOT CLEARED INSIDE THIS ISR
+      pulse_non_resetting[pair_index] = true;
+      // set the pulse flag when we think there is a pulse
+      pulse_resetting[pair_index] = true;
     }
+    // when the values are going down, it's the time between beats
     if (pulse_signal < PULSE_FINISHED_READING_MAX_THRESHOLD &&
-        pulse_resetting[pair_index] ==
-            true) { // when the values are going down, it's the time between
-                    // beats
-      pulse_resetting[pair_index] =
-          false; // reset the pulse flag so we can do it again!
+        pulse_resetting[pair_index] == true) {
+      // reset the pulse flag so we can do it again!
+      pulse_resetting[pair_index] = false;
     }
     if (sample_entry_counter[pair_index].increment()) {
       analysis_history[pair_index][analysis_history_index[pair_index].value] =
