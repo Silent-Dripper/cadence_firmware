@@ -51,7 +51,6 @@
 #if ACTUATORS_CONTROL_MODE == AC_MOSFET
 const int actuator_pins[NUM_PAIRS] = {ACTUATOR1_PIN, ACTUATOR2_PIN};
 #elif ACTUATORS_CONTROL_MODE == AC_MOTOR_SHIELD
-#include "utility/Adafruit_MS_PWMServoDriver.h"
 #include <Adafruit_MotorShield.h>
 #include <Wire.h>
 Adafruit_MotorShield AFMS = Adafruit_MotorShield();
