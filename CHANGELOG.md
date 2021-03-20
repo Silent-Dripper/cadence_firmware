@@ -1,6 +1,6 @@
 # Changelog
 
-## 6.0.0 - (2021-xx-xx)
+## 6.0.0 - (2021-03-20)
 
 * Added support to control stepper motor pumps using the TMC2208.
 * Added `config.h` to be able to switch between different platforms. The Cadence PCB, the Adafruit Motor Shield v2 and the new Silent Dripper PCB.
@@ -12,7 +12,7 @@
 
 ## 5.2.0 - (2020-11-7)
 
-* Set different enable times/pwm values depending on if the firmware is using the Adafruit Motor Sheild v2 or the MOSFETs on the Cadence PCB.
+* Set different enable times/pwm values depending on if the firmware is using the Adafruit Motor Shield v2 or the MOSFETs on the Cadence PCB.
 * Sound comparison script can drive steppers via TMCs and DC's via the prod mosfets.
 
 ## 5.1.0 - (2020-10-27)

@@ -82,7 +82,7 @@
 #elif ACTUATORS_CONTROL_MODE == AC_MOTOR_SHIELD
 #define ACTUATOR_1_MOTOR_ENABLE_TIME 155
 #define ACTUATOR_2_MOTOR_ENABLE_TIME 155
-// These will be written to the motor sheild's setSpeed method
+// These will be written to the motor shield's setSpeed method
 #define ACTUATOR_1_MOTOR_DRIVE_STRENGTH 150
 #define ACTUATOR_2_MOTOR_DRIVE_STRENGTH 150
 #elif ACTUATORS_CONTROL_MODE == AC_TMC2208
