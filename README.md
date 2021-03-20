@@ -69,6 +69,20 @@ On startup, the Arduino writes to the TMC's to set their drive parameters and qu
 * LED3 will emit 2 long blue blinks to indicate that the host PC has crashed and needs attention.
 * LED3 will blink green if it receives a `PULSE_LED` command.
 
+#### Switches
+
+*Input Power*: Flipping this switch all the way to the right connects the DC voltage on the barrel jack to the VMOT pins on the TMCs. This will enable the motors to be driven.
+
+This switch must be flipped for the motors to work even if the Arduino is being powered via USB.
+
+*Arduino Power*: This enables the onboard 5V regulator. Flip this if you'd like to have the arduino running standalone without a PC attached.
+
+*Pulse Drips*: Flip all the way to the right to enable drips on pulse detection on the two sensors. Flipping it to the left will enter a calibration mode, creating drips on both pumps to be able to adjust their size using the potentiometers.
+
+#### Potentiometers
+
+These two potentiometers are used to finely adjust the drop size without having to re-upload the firmware. If at any point you change the position of these knobs the drop size will change. Spin left to make them smaller, right to make them bigger.
+
 ### Cadence PCB
 
 ![Photo of Cadence PCB Render](media/cadence-pcb.PNG)
