@@ -1,5 +1,15 @@
 # Changelog
 
+## 6.0.1 - (2021-03-xx)
+
+In an effort to tune the drive config to make less noise, changes were made to create less frequent, larger steps. 
+
+* Decreased the amount of time between drips during calibration mode.
+* Decreased the step signal frequency from 9615.4hz -> 4464.3hz, we will ask for steps less often.
+* Decreased microsteps from 16->8, steps will be larger.
+* Decreased the max value for the steps per drip pot from 1500->500.
+* Decreased the actuator enable time from 400ms->250ms.
+
 ## 6.0.0 - (2021-03-20)
 
 * Added support to control stepper motor pumps using the TMC2208.

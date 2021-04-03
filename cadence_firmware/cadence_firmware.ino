@@ -70,7 +70,7 @@ CRGB leds[NUM_LEDS];
 #define TMC_PDN_DISABLE true // Use UART
 #define TMC_I_SCALE_ANALOG 0 // Adjust current from the register
 #define TMC_RMS_CURRENT 1000 // Set driver current 1A
-#define TMC_MICROSTEPS 16
+#define TMC_MICROSTEPS 8
 #define TMC_IRUN 9
 #define TMC_IHOLD 5
 #define TMC_GSTAT 0b111
@@ -454,10 +454,10 @@ void setup() {
 
   for (int i = 0; i < NUM_PAIRS; i++) {
 
-    bool sucessful_config = false;
+    bool successful_config = false;
     int num_config_attempts = 0;
 
-    while (sucessful_config == false &&
+    while (successful_config == false &&
            num_config_attempts < NUM_TMC_CONFIG_ATTEMPTS) {
 
       tmc_controllers[i].beginSerial(TMC_BAUD_RATE);
@@ -510,13 +510,13 @@ void setup() {
       // communication with the TMC was corrupted.
       if ((tmc_controllers[i].test_connection() == 0) &&
           (tmc_controllers[i].CRCerror == false)) {
-        sucessful_config = true;
+        successful_config = true;
       } else {
         num_config_attempts++;
       }
     }
 
-    if (sucessful_config) {
+    if (successful_config) {
 #if DEBUG_MODE == true
       Serial.print(
           "Established a successful connection over UART with TMC2208 #");
@@ -615,10 +615,10 @@ void setup() {
   // Set the TIMER2 prescaler to 128.
   TCCR2B = (1 << CS22) | (0 << CS21) | (1 << CS20);
   // Set the compare match register for TIMER2 to trigger with a frequency of
-  // ~9615.4hz. A rising edge will be sent to the step pin of a TMC every other
-  // clock cycle, or in this case every 3mS. If that TMC is enabled.
-  // = (16*10^6) / (3000 * 128) - 1 (must be <255 because it's only 1 byte)
-  OCR2A = 12; 
+  // ~4464.3hz. A rising edge will be sent to the step pin of a TMC every other
+  // clock cycle, or in this case every 0.44 milliseconds. If that TMC is enabled.
+  // = (16*10^6) / (4464.3 * 128) - 1 (must be <255 because it's only 1 byte)
+  OCR2A = 27; 
   // Enable the function inside of ISR(TIMER2_COMPA_vect).
   TIMSK2 |= (1 << OCIE2A);
 #endif
@@ -631,11 +631,11 @@ void loop() {
     change_actuator_state(0, true);
     delay(ACTUATOR_1_MOTOR_ENABLE_TIME);
     change_actuator_state(0, false);
-    delay(1000);
+    delay(500);
     change_actuator_state(1, true);
     delay(ACTUATOR_2_MOTOR_ENABLE_TIME);
     change_actuator_state(1, false);
-    delay(1000);
+    delay(500);
   }
 #endif
 
