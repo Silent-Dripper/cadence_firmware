@@ -1,0 +1,3 @@
+[submodule "cadence_firmware/digitalWriteFast"]
+	path = cadence_firmware/digitalWriteFast
+	url = https://github.com/NicksonYap/digitalWriteFast

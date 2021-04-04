@@ -89,10 +89,13 @@
 // TODO: This could lead to some steps being missed.
 // If you change the step frequency of the TMC's, and it looks like the drips
 // are getting cut off, start here.
-#define ACTUATOR_1_MOTOR_ENABLE_TIME 400
+#define ACTUATOR_1_MOTOR_ENABLE_TIME 333
 #define ACTUATOR_2_MOTOR_ENABLE_TIME ACTUATOR_1_MOTOR_ENABLE_TIME
-#define STEPPER_PUMP_MIN_STEPS_PER_DRIP 200
-#define STEPPER_PUMP_MAX_STEPS_PER_DRIP 1500
+#define STEPPER_PUMP_MIN_STEPS_PER_DRIP 1000
+#define STEPPER_PUMP_MAX_STEPS_PER_DRIP 20000
+// If no drips are produced on a given actuator in this amount of time
+// the pump will be disabled until it is to be written to again.
+#define STEPPER_PUMP_DISABLE_TIMEOUT_TIME 3000
 #else
 #error "Invalid ACTUATORS_CONTROL_MODE"
 #endif

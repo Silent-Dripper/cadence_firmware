@@ -1,5 +1,19 @@
 # Changelog
 
+## 6.1.0 - (2021-04-03)
+
+In an effort to tune the drive config to make even less noise, changes were made to create more frequent, smaller steps. 
+
+* Decreased the amount of time between drips during calibration mode.
+* Increased the step signal frequency from 9615.4hz -> 64516hz, we will ask for steps more often.
+* Increased microsteps from 16->256, steps will be much smaller.
+* Increased the max value for the steps per drip pot from 1500->20000.
+* Increased the min value for the steps per drip pot from 200 -> 1000.
+* Decreased the actuator enable time for stepper pumps from 400ms->333ms, this is the max time a drip can take on the TMCs.
+* Cleaned up the `TIMER2_COMPA_vect` ISR to be less complicated, and therefor faster.
+* Added the [digitalWriteFast](https://github.com/NicksonYap/digitalWriteFast) library to make the `TIMER2_COMPA_vect` ISR faster.
+* Added a section to the main loop to automatically hardware disable the TMC's if they're unused for 3 seconds.
+
 ## 6.0.0 - (2021-03-20)
 
 * Added support to control stepper motor pumps using the TMC2208.

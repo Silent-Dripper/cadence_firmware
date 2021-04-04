@@ -22,6 +22,7 @@
 */
 
 #include "config.h"
+#include "digitalWriteFast/digitalWriteFast.h"
 #include "enums.h"
 #include "wrapCounter.h"
 
@@ -70,7 +71,7 @@ CRGB leds[NUM_LEDS];
 #define TMC_PDN_DISABLE true // Use UART
 #define TMC_I_SCALE_ANALOG 0 // Adjust current from the register
 #define TMC_RMS_CURRENT 1000 // Set driver current 1A
-#define TMC_MICROSTEPS 16
+#define TMC_MICROSTEPS 256
 #define TMC_IRUN 9
 #define TMC_IHOLD 5
 #define TMC_GSTAT 0b111
@@ -86,7 +87,7 @@ const int tmc_step_pins[NUM_PAIRS] = {TMC_1_STEP_PIN, TMC_2_STEP_PIN};
 const int drip_size_pot_pins[NUM_PAIRS] = {ACTUATOR_1_DRIP_SIZE_POT_PIN,
                                            ACTUATOR_2_DRIP_SIZE_POT_PIN};
 // These two variables are used to control the motors
-volatile bool tmc_step_pin_value[NUM_PAIRS] = {false, false};
+unsigned long previous_actuator_enable_time[NUM_PAIRS] = {0, 0};
 volatile unsigned long tmc_remaining_steps[NUM_PAIRS] = {0, 0};
 #else
 #error "Invalid ACTUATORS_CONTROL_MODE"
@@ -293,6 +294,7 @@ void change_actuator_state(int actuator_index, bool enabled) {
           motor_drive_strengths[actuator_index]);
       actuator_controllers[actuator_index]->run(FORWARD);
 #elif ACTUATORS_CONTROL_MODE == AC_TMC2208
+      previous_actuator_enable_time[actuator_index] = millis();
       digitalWrite(tmc_enable_pins[actuator_index], LOW); // enable the driver
       tmc_remaining_steps[actuator_index] +=
           map(analogRead(drip_size_pot_pins[actuator_index]), 0, 1023,
@@ -304,7 +306,7 @@ void change_actuator_state(int actuator_index, bool enabled) {
 #elif ACTUATORS_CONTROL_MODE == AC_MOTOR_SHIELD
       actuator_controllers[actuator_index]->run(RELEASE);
 #elif ACTUATORS_CONTROL_MODE == AC_TMC2208
-      digitalWrite(tmc_enable_pins[actuator_index], HIGH); // disable the driver
+      tmc_remaining_steps[actuator_index] = 0;
 #endif
     }
   } else { // meaning the actuator is a solenoid or something similar
@@ -454,10 +456,10 @@ void setup() {
 
   for (int i = 0; i < NUM_PAIRS; i++) {
 
-    bool sucessful_config = false;
+    bool successful_config = false;
     int num_config_attempts = 0;
 
-    while (sucessful_config == false &&
+    while (successful_config == false &&
            num_config_attempts < NUM_TMC_CONFIG_ATTEMPTS) {
 
       tmc_controllers[i].beginSerial(TMC_BAUD_RATE);
@@ -510,13 +512,13 @@ void setup() {
       // communication with the TMC was corrupted.
       if ((tmc_controllers[i].test_connection() == 0) &&
           (tmc_controllers[i].CRCerror == false)) {
-        sucessful_config = true;
+        successful_config = true;
       } else {
         num_config_attempts++;
       }
     }
 
-    if (sucessful_config) {
+    if (successful_config) {
 #if DEBUG_MODE == true
       Serial.print(
           "Established a successful connection over UART with TMC2208 #");
@@ -612,13 +614,14 @@ void setup() {
   // If the timer's count ever gets to the value set in OCR2A.
   // It will reset the timer's count after executing the ISR.
   TCCR2A = (1 << WGM21);
-  // Set the TIMER2 prescaler to 128.
-  TCCR2B = (1 << CS22) | (0 << CS21) | (1 << CS20);
+  // Set the TIMER2 prescaler to 8.
+  TCCR2B = (0 << CS22) | (1 << CS21) | (0 << CS20);
   // Set the compare match register for TIMER2 to trigger with a frequency of
-  // ~9615.4hz. A rising edge will be sent to the step pin of a TMC every other
-  // clock cycle, or in this case every 3mS. If that TMC is enabled.
-  // = (16*10^6) / (3000 * 128) - 1 (must be <255 because it's only 1 byte)
-  OCR2A = 12; 
+  // 64516hz. A rising edge will be sent to the step pin of a TMC every
+  // clock cycle, or in this case every 15.5 microseconds. If that TMC is
+  // enabled. = (16*10^6) / (64516 * 8) - 1 (must be <255 because it's only 1
+  // byte)
+  OCR2A = 30;
   // Enable the function inside of ISR(TIMER2_COMPA_vect).
   TIMSK2 |= (1 << OCIE2A);
 #endif
@@ -631,11 +634,11 @@ void loop() {
     change_actuator_state(0, true);
     delay(ACTUATOR_1_MOTOR_ENABLE_TIME);
     change_actuator_state(0, false);
-    delay(1000);
+    delay(500);
     change_actuator_state(1, true);
     delay(ACTUATOR_2_MOTOR_ENABLE_TIME);
     change_actuator_state(1, false);
-    delay(1000);
+    delay(500);
   }
 #endif
 
@@ -725,6 +728,16 @@ void loop() {
       }
     }
   }
+#if ACTUATORS_CONTROL_MODE == AC_TMC2208
+  unsigned long current_time = millis();
+  // If the pump has not been enabled in some time, disable it.
+  for (int actuator_index = 0; actuator_index < NUM_PAIRS; actuator_index++) {
+    if (current_time - previous_actuator_enable_time[actuator_index] >
+        STEPPER_PUMP_DISABLE_TIMEOUT_TIME) {
+      digitalWrite(tmc_enable_pins[actuator_index], HIGH); // disable the driver
+    }
+  }
+#endif
 }
 
 // THIS IS THE TIMER1 INTERRUPT SERVICE ROUTINE.
@@ -763,17 +776,19 @@ ISR(TIMER1_COMPA_vect) {
 #if ACTUATORS_CONTROL_MODE == AC_TMC2208
 // THIS IS THE TIMER2 INTERRUPT SERVICE ROUTINE.
 ISR(TIMER2_COMPA_vect) {
-  for (int pair_index = 0; pair_index < NUM_PAIRS; pair_index++) {
-    if (tmc_remaining_steps[pair_index] > 0) {
-      digitalWrite(tmc_step_pins[pair_index], tmc_step_pin_value[pair_index]);
-      if (tmc_step_pin_value[pair_index] == true) {
-        tmc_remaining_steps[pair_index] = tmc_remaining_steps[pair_index] - 1;
-      }
-      tmc_step_pin_value[pair_index] = !tmc_step_pin_value[pair_index];
-    } else if (tmc_remaining_steps[pair_index] == 0) {
-      digitalWrite(tmc_step_pins[pair_index], false);
-      tmc_step_pin_value[pair_index] = false;
-    }
+  if (tmc_remaining_steps[0] > 0) {
+    digitalWriteFast(TMC_1_STEP_PIN, true);
+    digitalWriteFast(TMC_1_STEP_PIN, false);
+    tmc_remaining_steps[0] -= 1;
+  } else if (tmc_remaining_steps[0] == 0) {
+    digitalWriteFast(TMC_1_STEP_PIN, false);
+  }
+  if (tmc_remaining_steps[1] > 0) {
+    digitalWriteFast(TMC_2_STEP_PIN, true);
+    digitalWriteFast(TMC_2_STEP_PIN, false);
+    tmc_remaining_steps[1] -= 1;
+  } else if (tmc_remaining_steps[1] == 0) {
+    digitalWriteFast(TMC_2_STEP_PIN, false);
   }
 }
 #endif
