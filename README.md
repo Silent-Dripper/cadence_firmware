@@ -50,7 +50,8 @@ To use this platform, the following Arduino libraries have to be installed:
 * [FastLED](https://www.arduino.cc/reference/en/libraries/fastled/)
 * [TMCStepper](https://www.arduino.cc/reference/en/libraries/tmcstepper/)
 
-The [digitalWriteFast](https://github.com/NicksonYap/digitalWriteFast) library is included as a submodule of this repo. It is used to change the state of the `STEP` pins on the TMC's very quickly.
+The [digitalWriteFast](https://github.com/NicksonYap/digitalWriteFast) library is included as a submodule of this repo, and does not to be installed using the library manager. 
+It is used to change the state of the `STEP` pins on the TMC's very quickly.
 
 #### LED blink codes
 
