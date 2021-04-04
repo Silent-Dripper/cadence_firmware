@@ -1,8 +1,8 @@
 # Changelog
 
-## 6.0.1 - (2021-03-xx)
+## 6.1.0 - (2021-04-xx)
 
-In an effort to tune the drive config to make less noise, changes were made to create less frequent, larger steps. 
+In an effort to tune the drive config to make less noise, changes were made to create more frequent, smaller steps. 
 
 * Decreased the amount of time between drips during calibration mode.
 * Decreased the step signal frequency from 9615.4hz -> 4464.3hz, we will ask for steps less often.
