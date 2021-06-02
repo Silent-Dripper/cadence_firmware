@@ -1,5 +1,10 @@
 # Changelog
 
+## 6.2.0 - (2021-06-02)
+
+* For calibration mode on Silent Dripper PCB, decreased time between drippers from 500ms to 100ms
+* Changed the `digitalWriteFast` library from a git submodule to a plain directory so it can be shipped with bitbucket downloads.
+
 ## 6.1.0 - (2021-04-03)
 
 In an effort to tune the drive config to make even less noise, changes were made to create more frequent, smaller steps. 

@@ -634,11 +634,11 @@ void loop() {
     change_actuator_state(0, true);
     delay(ACTUATOR_1_MOTOR_ENABLE_TIME);
     change_actuator_state(0, false);
-    delay(500);
+    delay(100);
     change_actuator_state(1, true);
     delay(ACTUATOR_2_MOTOR_ENABLE_TIME);
     change_actuator_state(1, false);
-    delay(500);
+    delay(100);
   }
 #endif
 
