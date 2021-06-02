@@ -1,5 +1,9 @@
 # Changelog
 
+## 6.2.0 - (2021-04-XX)
+
+* For calibration mode on Silent Dripper PCB, decreased time between drippers from 500ms to 100ms 
+
 ## 6.1.0 - (2021-04-03)
 
 In an effort to tune the drive config to make even less noise, changes were made to create more frequent, smaller steps. 
