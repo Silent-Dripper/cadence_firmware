@@ -89,7 +89,7 @@ These two potentiometers are used to finely adjust the drop size without having 
 
 ### Cadence PCB
 
-![Photo of Cadence PCB Render](./media/cadence-pcb.PNG)
+![Photo of Cadence PCB Render](./media/cadence-pcb.JPG)
 
 The first use-case for this firmware. Used to drive solenoids via MOSFETs for [Cadence](https://www.saradittrich.com/Cadence).
 
