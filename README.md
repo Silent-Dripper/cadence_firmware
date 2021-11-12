@@ -41,17 +41,18 @@ Section of `config.h` to understand how each of these circuits should connect to
 
 ### Silent Dripper PCB
 
-![Photo of Silent Dripper PCB](media/silent-dripper.JPG)
+![Photo of Silent Dripper PCB](./media/silent-dripper.JPG)
 
 This configuration leverages the TMC2208 to drive small stepper motor peristaltic pumps to water droplets in complete silence. For a technical overview of this use-case see this [blog post](www.esologic.com/silent-dripper).
+
+The corresponding circuit diagrams can be found [here](https://github.com/Silent-Dripper/silent-dripper-electrical).
 
 To use this platform, the following Arduino libraries have to be installed:
 
 * [FastLED](https://www.arduino.cc/reference/en/libraries/fastled/)
 * [TMCStepper](https://www.arduino.cc/reference/en/libraries/tmcstepper/)
 
-The [digitalWriteFast](https://github.com/NicksonYap/digitalWriteFast) library is included as a submodule of this repo, and does not to be installed using the library manager. 
-It is used to change the state of the `STEP` pins on the TMC's very quickly.
+The [digitalWriteFast](https://github.com/NicksonYap/digitalWriteFast) library is included as a submodule of this repo, and does not to be installed using the library manager. It is used to change the state of the `STEP` pins on the TMC's very quickly.
 
 #### LED blink codes
 
@@ -68,7 +69,7 @@ On startup, the Arduino writes to the TMC's to set their drive parameters and qu
 ##### Run
 
 * LEDs 1/2 will turn purple if their corresponding motor is enabled and spinning, and turn off if they are disabled.
-*  LED3, the indicator LED will blink blue 3 times quickly to indicate that the host PC will start sending messages.
+* LED3, the indicator LED will blink blue 3 times quickly to indicate that the host PC will start sending messages.
 * LED3 will emit 2 long blue blinks to indicate that the host PC has crashed and needs attention.
 * LED3 will blink green if it receives a `PULSE_LED` command.
 
@@ -84,11 +85,11 @@ This switch must be flipped for the motors to work even if the Arduino is being 
 
 #### Potentiometers
 
-These two potentiometers are used to finely adjust the drop size without having to re-upload the firmware. If at any point you change the position of these knobs the drop size will change. Spin left to make them smaller, right to make them bigger.
+These two potentiometers are used to finely adjust the drop size without having to re-upload the firmware. If at any point you change the position of these knobs the drop size will change. Spin left (towards the power inlet) to make them smaller, right to make them bigger.
 
 ### Cadence PCB
 
-![Photo of Cadence PCB Render](media/cadence-pcb.PNG)
+![Photo of Cadence PCB Render](./media/cadence-pcb.PNG)
 
 The first use-case for this firmware. Used to drive solenoids via MOSFETs for [Cadence](https://www.saradittrich.com/Cadence).
 
@@ -98,7 +99,7 @@ Same indicator LED blinks on D3 as `Silent Dripper PCB`.
 
 ### Adafruit Motor Shield v2
 
-![Photo of Adafruit Motor Shield Implementation](media/adafruit.JPG)
+![Photo of Adafruit Motor Shield Implementation](./media/adafruit.JPG)
 
 This configuration was used to drive the first iteration of [The Tender Interval](https://www.saradittrich.com/The-Tender-Interval).
 
