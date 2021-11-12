@@ -1,5 +1,10 @@
 # Changelog
 
+## 6.2.1 - (2021-11-11)
+
+* Updated README.md for release.
+* Released project publicly on GitHub
+
 ## 6.2.0 - (2021-06-02)
 
 * For calibration mode on Silent Dripper PCB, decreased time between drippers from 500ms to 100ms
