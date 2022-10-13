@@ -21,6 +21,13 @@
   High level configuration constants
 */
 
+// In calibration mode, the amount of time to wait between drips.
+#define CALIBRATION_OFF_TIME_MS 1000
+
+// Added to the number of steps sent to the stepper driver in calibration mode.
+// Should be 0 in most cases.
+#define CALIBRATION_STEPS_OFFSET 64516 // 1 second / 15.5us
+
 #define PLATFORM_CADENCE_PCB 0
 #define PLATFORM_ADAFRUIT_MOTOR_SHIELD 1
 #define PLATFORM_SILENT_DRIPPER_PCB 2
