@@ -414,18 +414,12 @@ void communicate_actuator_status(int actuator_index, ActuatorStatus s) {
 }
 
 /**
- * @brief Blocks while an actuator is active, will return once the actuator stops moving.
+ * @brief Blocks while the stepper is clocking out pulses, will return once the stepper stops rotating.
  * 
  * @param actuator_index The actuator to block on.
  */
-void block_actuator_moving(int actuator_index) {
-#if ACTUATORS_CONTROL_MODE == AC_MOSFET
-  // TODO: Not needed now but will produce confusing results if used later.
-#elif ACTUATORS_CONTROL_MODE == AC_MOTOR_SHIELD
-  // TODO: Not needed now but will produce confusing results if used later.
-#elif ACTUATORS_CONTROL_MODE == AC_TMC2208
+void block_stepper_spinning(int actuator_index) {
   while (tmc_remaining_steps[actuator_index] > 0) {}
-#endif
 }
 
 
@@ -650,7 +644,7 @@ void loop() {
     for (int i = 0; i < NUM_PAIRS; i++) {
       tmc_remaining_steps[i] += CALIBRATION_STEPS_OFFSET;
       change_actuator_state(i, true);
-      block_actuator_moving(i);
+      block_stepper_spinning(i);
       change_actuator_state(i, false);
       delay(CALIBRATION_OFF_TIME_MS);
     }
