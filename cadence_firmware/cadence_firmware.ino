@@ -413,6 +413,16 @@ void communicate_actuator_status(int actuator_index, ActuatorStatus s) {
 #endif
 }
 
+/**
+ * @brief Blocks while the stepper is clocking out pulses, will return once the stepper stops rotating.
+ * 
+ * @param actuator_index The actuator to block on.
+ */
+void block_stepper_spinning(int actuator_index) {
+  while (tmc_remaining_steps[actuator_index] > 0) {}
+}
+
+
 void setup() {
 
   // Enable serial port first so we're able to write debug output if there are
@@ -631,14 +641,13 @@ void loop() {
 
 #if PLATFORM == PLATFORM_SILENT_DRIPPER_PCB
   while (digitalRead(CALIBRATION_MODE_SWITCH_PIN) == LOW) {
-    change_actuator_state(0, true);
-    delay(ACTUATOR_1_MOTOR_ENABLE_TIME);
-    change_actuator_state(0, false);
-    delay(100);
-    change_actuator_state(1, true);
-    delay(ACTUATOR_2_MOTOR_ENABLE_TIME);
-    change_actuator_state(1, false);
-    delay(100);
+    for (int i = 0; i < NUM_PAIRS; i++) {
+      tmc_remaining_steps[i] += CALIBRATION_STEPS_OFFSET;
+      change_actuator_state(i, true);
+      block_stepper_spinning(i);
+      change_actuator_state(i, false);
+      delay(CALIBRATION_OFF_TIME_MS);
+    }
   }
 #endif
 
@@ -775,6 +784,8 @@ ISR(TIMER1_COMPA_vect) {
 
 #if ACTUATORS_CONTROL_MODE == AC_TMC2208
 // THIS IS THE TIMER2 INTERRUPT SERVICE ROUTINE.
+// Responsible for writing out square waves to the step pin on the TMC.
+// It writes out a complete pulse per invocation.
 ISR(TIMER2_COMPA_vect) {
   if (tmc_remaining_steps[0] > 0) {
     digitalWriteFast(TMC_1_STEP_PIN, true);

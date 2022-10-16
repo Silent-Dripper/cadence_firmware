@@ -1,5 +1,9 @@
 # Changelog
 
+## 6.3.0 - (2022-10-12)
+
+* Introduced new config values `CALIBRATION_OFF_TIME_MS` and `CALIBRATION_STEPS_OFFSET` to add a bit more user configuration to these functions.
+
 ## 6.2.1 - (2021-11-11)
 
 * Updated README.md for release.
