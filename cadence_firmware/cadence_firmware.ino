@@ -47,17 +47,17 @@
 // Amount in milliseconds to hold solenoid on for if the actuator is a solenoid
 #define DEFAULT_ACTUATOR_ENABLE_TIME 100
 
-#define NUM_PAIRS 2
+#define MAX_NUM_PAIRS 2
 
 #if ACTUATORS_CONTROL_MODE == AC_MOSFET
-const int actuator_pins[NUM_PAIRS] = {ACTUATOR1_PIN, ACTUATOR2_PIN};
+const int actuator_pins MAX_NUM_PAIRS] = {ACTUATOR1_PIN, ACTUATOR2_PIN};
 #elif ACTUATORS_CONTROL_MODE == AC_MOTOR_SHIELD
 #include <Adafruit_MotorShield.h>
 #include <Wire.h>
 Adafruit_MotorShield AFMS = Adafruit_MotorShield();
 Adafruit_DCMotor *actuator_1 = AFMS.getMotor(1);
 Adafruit_DCMotor *actuator_2 = AFMS.getMotor(2);
-const Adafruit_DCMotor *actuator_controllers[NUM_PAIRS] = {actuator_1,
+const Adafruit_DCMotor *actuator_controllers MAX_NUM_PAIRS] = {actuator_1,
                                                            actuator_2};
 #elif ACTUATORS_CONTROL_MODE == AC_TMC2208
 #include <FastLED.h>
@@ -70,25 +70,22 @@ CRGB leds[NUM_LEDS];
 #define TMC_BAUD_RATE 4800
 #define TMC_PDN_DISABLE true // Use UART
 #define TMC_I_SCALE_ANALOG 0 // Adjust current from the register
-#define TMC_RMS_CURRENT 1000 // Set driver current 1A
 #define TMC_MICROSTEPS 256
-#define TMC_IRUN 9
-#define TMC_IHOLD 5
 #define TMC_GSTAT 0b111
 // The SilentStepStick series drivers, including the TMC2208 use 0.11
 #define R_SENSE 0.11f
 
-TMC2208Stepper tmc_controllers[NUM_PAIRS] = {
+TMC2208Stepper tmc_controllers[MAX_NUM_PAIRS] = {
     TMC2208Stepper(TMC_1_SW_RX, TMC_1_SW_TX, R_SENSE),
     TMC2208Stepper(TMC_2_SW_RX, TMC_2_SW_TX, R_SENSE)};
 
-const int tmc_enable_pins[NUM_PAIRS] = {TMC_1_EN_PIN, TMC_2_EN_PIN};
-const int tmc_step_pins[NUM_PAIRS] = {TMC_1_STEP_PIN, TMC_2_STEP_PIN};
-const int drip_size_pot_pins[NUM_PAIRS] = {ACTUATOR_1_DRIP_SIZE_POT_PIN,
+const int tmc_enable_pins[MAX_NUM_PAIRS] = {TMC_1_EN_PIN, TMC_2_EN_PIN};
+const int tmc_step_pins[MAX_NUM_PAIRS] = {TMC_1_STEP_PIN, TMC_2_STEP_PIN};
+const int drip_size_pot_pins[MAX_NUM_PAIRS] = {ACTUATOR_1_DRIP_SIZE_POT_PIN,
                                            ACTUATOR_2_DRIP_SIZE_POT_PIN};
 // These two variables are used to control the motors
-unsigned long previous_actuator_enable_time[NUM_PAIRS] = {0, 0};
-volatile unsigned long tmc_remaining_steps[NUM_PAIRS] = {0, 0};
+unsigned long previous_actuator_enable_time[MAX_NUM_PAIRS] = {0, 0};
+volatile unsigned long tmc_remaining_steps[MAX_NUM_PAIRS] = {0, 0};
 #else
 #error "Invalid ACTUATORS_CONTROL_MODE"
 #endif
@@ -118,10 +115,10 @@ volatile unsigned long tmc_remaining_steps[NUM_PAIRS] = {0, 0};
 */
 
 // used to find the time between beats
-volatile unsigned long last_beat_time[NUM_PAIRS] = {0, 0};
+volatile unsigned long last_beat_time[MAX_NUM_PAIRS] = {0, 0};
 
 // used to determine pulse timing
-volatile unsigned long last_sample_time[NUM_PAIRS] = {0, 0};
+volatile unsigned long last_sample_time[MAX_NUM_PAIRS] = {0, 0};
 
 // To avoid false positives
 #define MIN_TIME_BETWEEN_BEATS 400
@@ -142,35 +139,35 @@ volatile unsigned long last_sample_time[NUM_PAIRS] = {0, 0};
 #define ANALYSIS_MAX_NEGATIVE_THRESHOLD 50
 #define MIN_DISTANCE_FROM_NEGATIVE_ANALYSIS 3000 // in ms
 
-volatile int analysis_history[NUM_PAIRS][NUM_HISTORIC_ANALYSIS] = {0};
-wrapCounter analysis_history_index[NUM_PAIRS];
-wrapCounter sample_entry_counter[NUM_PAIRS];
-volatile unsigned long previous_negative_analysis_time[NUM_PAIRS] = {0};
+volatile int analysis_history[MAX_NUM_PAIRS][NUM_HISTORIC_ANALYSIS] = {0};
+wrapCounter analysis_history_index[MAX_NUM_PAIRS];
+wrapCounter sample_entry_counter[MAX_NUM_PAIRS];
+volatile unsigned long previous_negative_analysis_time[MAX_NUM_PAIRS] = {0};
 
 // these are volatile because they are used inside of the ISR
 // true when inside a pulse, false otherwise
-volatile boolean pulse_resetting[NUM_PAIRS] = {false, false};
+volatile boolean pulse_resetting[MAX_NUM_PAIRS] = {false, false};
 
 // true when a new pulse starts, does not get set to false with the ISR
-volatile boolean pulse_non_resetting[NUM_PAIRS] = {false, false};
+volatile boolean pulse_non_resetting[MAX_NUM_PAIRS] = {false, false};
 
-const bool actuator_controlled_via_serial_port[NUM_PAIRS] = {
+const bool actuator_controlled_via_serial_port[MAX_NUM_PAIRS] = {
     ACTUATOR_1_SERIAL_CONTROL, ACTUATOR_2_SERIAL_CONTROL};
-const int pulse_sensor_pins[NUM_PAIRS] = {PULSE1_PIN, PULSE2_PIN};
+const int pulse_sensor_pins[MAX_NUM_PAIRS] = {PULSE1_PIN, PULSE2_PIN};
 
-const bool actuator_is_motor[NUM_PAIRS] = {ACTUATOR_1_MOTOR, ACTUATOR_2_MOTOR};
-const int motor_enable_times[NUM_PAIRS] = {ACTUATOR_1_MOTOR_ENABLE_TIME,
+const bool actuator_is_motor[MAX_NUM_PAIRS] = {ACTUATOR_1_MOTOR, ACTUATOR_2_MOTOR};
+const int motor_enable_times[MAX_NUM_PAIRS] = {ACTUATOR_1_MOTOR_ENABLE_TIME,
                                            ACTUATOR_2_MOTOR_ENABLE_TIME};
 
 #if ACTUATORS_CONTROL_MODE == AC_MOSFET ||                                     \
     ACTUATORS_CONTROL_MODE == AC_MOTOR_SHIELD
-const int motor_drive_strengths[NUM_PAIRS] = {ACTUATOR_1_MOTOR_DRIVE_STRENGTH,
+const int motor_drive_strengths MAX_NUM_PAIRS] = {ACTUATOR_1_MOTOR_DRIVE_STRENGTH,
                                               ACTUATOR_2_MOTOR_DRIVE_STRENGTH};
 #endif
 
-bool pulse_sensor_enabled[NUM_PAIRS] = {false, false};
-bool actuator_enabled[NUM_PAIRS] = {false, false};
-volatile unsigned long actuation_start_time[NUM_PAIRS] = {0, 0};
+bool pulse_sensor_enabled[MAX_NUM_PAIRS] = {false, false};
+bool actuator_enabled[MAX_NUM_PAIRS] = {false, false};
+volatile unsigned long actuation_start_time[MAX_NUM_PAIRS] = {0, 0};
 
 int most_recent_drip_command_type;
 bool serial_message_needs_responding_to = false;
@@ -458,13 +455,13 @@ void setup() {
   pinMode(TMC_2_DIR_PIN, OUTPUT);
   digitalWrite(TMC_2_EN_PIN, LOW); // enable the driver
 
-  for (int i = 0; i < NUM_PAIRS; i++) {
+  for (int i = 0; i < PAIRS_USED; i++) {
     communicate_actuator_status(i, unconfigured);
   }
 
   delay(LED_UI_DELAY_MS);
 
-  for (int i = 0; i < NUM_PAIRS; i++) {
+  for (int i = 0; i < PAIRS_USED; i++) {
 
     bool successful_config = false;
     int num_config_attempts = 0;
@@ -554,13 +551,13 @@ void setup() {
 
   delay(LED_UI_DELAY_MS);
 
-  for (int i = 0; i < NUM_PAIRS; i++) {
+  for (int i = 0; i < PAIRS_USED; i++) {
     communicate_actuator_status(i, actuator_stopped);
   }
 
 #endif
 
-  for (int pair_index = 0; pair_index < NUM_PAIRS; pair_index++) {
+  for (int pair_index = 0; pair_index < PAIRS_USED; pair_index++) {
 
     // If a given sensor isn't going to be used, disable it.
     if (actuator_controlled_via_serial_port[pair_index]) {
@@ -641,7 +638,7 @@ void loop() {
 
 #if PLATFORM == PLATFORM_SILENT_DRIPPER_PCB
   while (digitalRead(CALIBRATION_MODE_SWITCH_PIN) == LOW) {
-    for (int i = 0; i < NUM_PAIRS; i++) {
+    for (int i = 0; i < PAIRS_USED; i++) {
       tmc_remaining_steps[i] += CALIBRATION_STEPS_OFFSET;
       change_actuator_state(i, true);
       block_stepper_spinning(i);
@@ -691,7 +688,7 @@ void loop() {
     }
   }
 
-  for (int pair_index = 0; pair_index < NUM_PAIRS; pair_index++) {
+  for (int pair_index = 0; pair_index < PAIRS_USED; pair_index++) {
     bool start_actuator = false;
     // Either accept a command from the PC or read from the pulse sensor
     if (actuator_controlled_via_serial_port[pair_index] == true) {
@@ -740,7 +737,7 @@ void loop() {
 #if ACTUATORS_CONTROL_MODE == AC_TMC2208
   unsigned long current_time = millis();
   // If the pump has not been enabled in some time, disable it.
-  for (int actuator_index = 0; actuator_index < NUM_PAIRS; actuator_index++) {
+  for (int actuator_index = 0; actuator_index < PAIRS_USED; actuator_index++) {
     if (current_time - previous_actuator_enable_time[actuator_index] >
         STEPPER_PUMP_DISABLE_TIMEOUT_TIME) {
       digitalWrite(tmc_enable_pins[actuator_index], HIGH); // disable the driver
@@ -751,7 +748,7 @@ void loop() {
 
 // THIS IS THE TIMER1 INTERRUPT SERVICE ROUTINE.
 ISR(TIMER1_COMPA_vect) {
-  for (int pair_index = 0; pair_index < NUM_PAIRS; pair_index++) {
+  for (int pair_index = 0; pair_index < PAIRS_USED; pair_index++) {
     int pulse_signal = analogRead(pulse_sensor_pins[pair_index]);
     last_sample_time[pair_index] = millis();
     // monitor the time since the last beat to avoid noise

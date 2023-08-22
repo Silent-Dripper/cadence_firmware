@@ -32,7 +32,7 @@
 #define PLATFORM_ADAFRUIT_MOTOR_SHIELD 1
 #define PLATFORM_SILENT_DRIPPER_PCB 2
 
-// Set this contstant to tell the firmware what type of drivers/other hardware
+// Set this constant to tell the firmware what type of drivers/other hardware
 // are attached to the Arduino.
 #define PLATFORM PLATFORM_SILENT_DRIPPER_PCB
 
@@ -55,6 +55,26 @@
 #define ACTUATOR_1_MOTOR true
 #define ACTUATOR_2_MOTOR true
 
+// Two types of pumps are supported on the silent dripper PCB.
+#define SD_PUMP_XP88_ST01 0
+#define SD_PUMP_YANMIS 1
+
+// Select Silent Dripper PCB Pump
+// For Cadence, set this to SD_PUMP_XP88_ST01
+// For Ebb and Flow, set this to SD_PUMP_YANMIS
+#define SD_PUMP SD_PUMP_XP88_ST01
+
+// Controls the number of sensor/pump combos are to be active during the `setup` and `loop` functions.
+// For Cadence, set this to 2
+// For Ebb and Flow, set this to 1
+#define PAIRS_USED 2
+
+/*
+
+The rest of this file validates and translates the high level configuration constants into their usable forms.
+
+*/
+
 #if PLATFORM == PLATFORM_CADENCE_PCB
 #define ACTUATORS_CONTROL_MODE AC_MOSFET
 // The Cadence PCB is capable of driving either a motor OR a solenoid, and is
@@ -72,6 +92,20 @@
 // This LED is used to communicate the status of the communication with a PC
 // host, see `status_led_blink` for more.
 #define SERIAL_STATUS_LED_INDEX 2
+#if SD_PUMP == SD_PUMP_XP88_ST01
+#define TMC_RMS_CURRENT 1000 // 1 Amp
+// Scaling factors for run / hold current. Determined experimentally.
+#define TMC_IRUN 9
+#define TMC_IHOLD 5
+#pragma message "Using XP88 Pump w/TMCs"
+#elif SD_PUMP == SD_PUMP_YANMIS
+#define TMC_RMS_CURRENT 1300
+#define TMC_IRUN 12
+#define TMC_IHOLD 6
+#pragma message "Using YAMNIS Pump w/TMCs"
+#else
+#error "Invalid Pump Type for Silent Dripper PCB w/TMCs"
+#endif
 #else
 #error "Invalid PLATFORM"
 #endif
