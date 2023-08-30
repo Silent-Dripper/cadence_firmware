@@ -50,14 +50,14 @@
 #define MAX_NUM_PAIRS 2
 
 #if ACTUATORS_CONTROL_MODE == AC_MOSFET
-const int actuator_pins MAX_NUM_PAIRS] = {ACTUATOR1_PIN, ACTUATOR2_PIN};
+const int actuator_pins [MAX_NUM_PAIRS] = {ACTUATOR1_PIN, ACTUATOR2_PIN};
 #elif ACTUATORS_CONTROL_MODE == AC_MOTOR_SHIELD
 #include <Adafruit_MotorShield.h>
 #include <Wire.h>
 Adafruit_MotorShield AFMS = Adafruit_MotorShield();
 Adafruit_DCMotor *actuator_1 = AFMS.getMotor(1);
 Adafruit_DCMotor *actuator_2 = AFMS.getMotor(2);
-const Adafruit_DCMotor *actuator_controllers MAX_NUM_PAIRS] = {actuator_1,
+const Adafruit_DCMotor *actuator_controllers [MAX_NUM_PAIRS] = {actuator_1,
                                                            actuator_2};
 #elif ACTUATORS_CONTROL_MODE == AC_TMC2208
 #include <FastLED.h>
@@ -506,6 +506,8 @@ void setup() {
         short circuit (passive braking) for motor stand still.
       */
       tmc_controllers[i].ihold(TMC_IHOLD);
+
+
 
       // Marlin, the 3D printer firmware, and probably the most widely used
       // implementation of these TMC drivers has a 200ms delay right after the
