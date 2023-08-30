@@ -22,7 +22,7 @@
 */
 
 // In calibration mode, the amount of time to wait between drips.
-#define CALIBRATION_OFF_TIME_MS 1000
+#define CALIBRATION_OFF_TIME_MS 0
 
 // Added to the number of steps sent to the stepper driver in calibration mode.
 // Should be 0 in most cases.
@@ -48,8 +48,7 @@
 // drive the actuators.
 #define AC_MOTOR_SHIELD 1
 
-// Use the TMC2208s on the Silent Dripper PCB to drive the Stepper Motors, the
-// MaschinenReich XP88-ST01.
+// Use the TMC2208s on the Silent Dripper PCB to drive the Stepper Motors.
 #define AC_TMC2208 2
 
 #define ACTUATOR_1_MOTOR true
@@ -62,12 +61,12 @@
 // Select Silent Dripper PCB Pump
 // For Cadence, set this to SD_PUMP_XP88_ST01
 // For Ebb and Flow, set this to SD_PUMP_YANMIS
-#define SD_PUMP SD_PUMP_XP88_ST01
+#define SD_PUMP SD_PUMP_YANMIS
 
 // Controls the number of sensor/pump combos are to be active during the `setup` and `loop` functions.
 // For Cadence, set this to 2
 // For Ebb and Flow, set this to 1
-#define PAIRS_USED 2
+#define PAIRS_USED 1
 
 /*
 
